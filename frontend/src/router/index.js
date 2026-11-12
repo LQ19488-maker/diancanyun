@@ -31,8 +31,7 @@ export const adminRoutes = [
   {
     path: 'dish',
     name: 'dish',
-    component: () => import('@/views/ComingSoon.vue'),
-    props: { title: '菜品管理' },
+    component: () => import('@/views/dish/index.vue'),
     meta: { title: '菜品管理', icon: 'Dish', menu: true, roles: ['ADMIN', 'STAFF'] }
   },
   {

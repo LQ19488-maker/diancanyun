@@ -78,6 +78,7 @@ export function request(config) {
 /** 相对路径补全为可直接用于 img src 的地址 */
 export function resolveFileUrl(path) {
   if (!path) return ''
-  if (/^https?:\/\//i.test(path)) return path
+  // 已经是完整地址的直接返回：http(s)、协议相对 //、以及 data:/blob:（演示环境的 base64 图）
+  if (/^(https?:|data:|blob:)/i.test(path) || path.startsWith('//')) return path
   return `${UPLOAD_BASE}${path.startsWith('/') ? '' : '/'}${path}`
 }

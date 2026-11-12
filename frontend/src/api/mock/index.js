@@ -92,7 +92,60 @@ function seed() {
     2003: [{ name: '份量', values: [{ name: '小碗' }, { name: '大碗' }] }]
   }
 
-  return { employees, categories, flavors, seqEmp: 1001 + employees.length, seqCat: 2001 + categories.length }
+  /* ---------------- 菜品（图片用内联 SVG，离线也能显示）---------------- */
+  const thumb = (text, bg) => {
+    const svg =
+      `<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96">` +
+      `<rect width="96" height="96" rx="10" fill="${bg}"/>` +
+      `<text x="48" y="60" font-size="40" text-anchor="middle" fill="#ffffff" ` +
+      `font-family="Microsoft YaHei,sans-serif">${text}</text></svg>`
+    return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg)
+  }
+  const palette = ['#e8833a', '#c0392b', '#2e7d5b', '#3a6ea5', '#8e5aa8', '#b8860b', '#4a7c59']
+  const rawDishes = [
+    ['宫保鸡丁', 2001, 38.0, [{ name: '辣度', values: ['微辣', '中辣'] }]],
+    ['鱼香肉丝', 2001, 32.0, [{ name: '辣度', values: ['微辣'] }]],
+    ['麻婆豆腐', 2001, 26.0, [{ name: '辣度', values: ['中辣', '特辣'] }]],
+    ['红烧肉', 2001, 48.0, [{ name: '份量', values: ['小份', '大份'] }]],
+    ['酸辣土豆丝', 2001, 18.0, [{ name: '辣度', values: ['微辣', '中辣'] }]],
+    ['清蒸鲈鱼', 2001, 68.0, []],
+    ['凉拌黄瓜', 2002, 14.0, [{ name: '口味', values: ['清淡'] }]],
+    ['口水鸡', 2002, 36.0, [{ name: '口味', values: ['重口'] }]],
+    ['凉拌木耳', 2002, 16.0, []],
+    ['米饭', 2003, 2.0, [{ name: '份量', values: ['小碗', '大碗'] }]],
+    ['蛋炒饭', 2003, 22.0, [{ name: '份量', values: ['小碗', '大碗'] }]],
+    ['牛肉面', 2003, 28.0, [{ name: '份量', values: ['小碗', '大碗'] }]],
+    ['番茄蛋汤', 2004, 12.0, []],
+    ['酸辣汤', 2004, 16.0, [{ name: '辣度', values: ['微辣'] }]],
+    ['排骨汤', 2004, 32.0, []],
+    ['柠檬水', 2005, 10.0, [{ name: '温度', values: ['常温', '加冰'] }, { name: '甜度', values: ['无糖', '半糖'] }]],
+    ['可口可乐', 2005, 6.0, [{ name: '温度', values: ['常温', '加冰'] }]],
+    ['鲜榨橙汁', 2005, 18.0, [{ name: '温度', values: ['常温', '加冰'] }, { name: '甜度', values: ['全糖'] }]],
+    ['酸梅汤', 2005, 12.0, [{ name: '温度', values: ['加冰'] }]],
+    ['红豆双皮奶', 2006, 16.0, []],
+    ['杨枝甘露', 2006, 22.0, []],
+    ['炸鸡块', 2007, 24.0, [{ name: '辣度', values: ['不辣', '微辣'] }]],
+    ['薯条', 2007, 15.0, []],
+    ['烤鸡翅', 2007, 28.0, [{ name: '辣度', values: ['微辣', '中辣'] }]]
+  ]
+  const dishes = rawDishes.map(([name, categoryId, price, flavors], i) => ({
+    id: String(3001 + i),
+    name,
+    categoryId: String(categoryId),
+    price,
+    image: thumb(name.slice(0, 1), palette[i % palette.length]),
+    description: `${name}，现点现做`,
+    status: i % 7 === 5 ? 0 : 1,
+    flavors,
+    updateTime: ago(i * 4 + 1)
+  }))
+
+  return {
+    employees, categories, flavors, dishes,
+    seqEmp: 1001 + employees.length,
+    seqCat: 2001 + categories.length,
+    seqDish: 3001 + dishes.length
+  }
 }
 
 function load() {
@@ -352,6 +405,108 @@ const routes = [
       save(db)
       return ok({ categoryId: String(match[1]), flavors })
     }
+  },
+
+  /* ---------------- 菜品 ---------------- */
+  {
+    method: 'get',
+    url: /^\/admin\/dish\/page$/,
+    handler: ({ params }) => {
+      const db = load()
+      const catName = (id) => (db.categories.find((c) => String(c.id) === String(id)) || {}).name || ''
+      let rows = (db.dishes || []).map((d) => ({ ...d, categoryName: catName(d.categoryId) }))
+      const { name, categoryId, status } = params || {}
+      if (name) rows = rows.filter((r) => (r.name || '').includes(name))
+      if (notEmpty(categoryId)) rows = rows.filter((r) => String(r.categoryId) === String(categoryId))
+      if (notEmpty(status)) rows = rows.filter((r) => Number(r.status) === Number(status))
+      rows.sort((a, b) => (a.updateTime < b.updateTime ? 1 : -1))
+      return ok(paginate(rows, params))
+    }
+  },
+  {
+    method: 'post',
+    url: /^\/admin\/dish$/,
+    handler: ({ data }) => {
+      const db = load()
+      const type = Number((db.categories.find((c) => String(c.id) === String(data.categoryId)) || {}).type)
+      if (type !== 1) return fail(1001, '请选择菜品分类（套餐分类不能放菜品）')
+      if (db.dishes.some((d) => d.name === data.name)) return fail(4001, '已存在同名菜品')
+      const row = {
+        id: String(db.seqDish++),
+        name: (data.name || '').trim(),
+        categoryId: String(data.categoryId),
+        price: Number(data.price) || 0,
+        image: data.image || '',
+        description: data.description || '',
+        status: Number(data.status) === 0 ? 0 : 1,
+        flavors: data.flavors || [],
+        updateTime: new Date().toISOString()
+      }
+      db.dishes.unshift(row)
+      save(db)
+      return ok(row)
+    }
+  },
+  {
+    method: 'put',
+    url: /^\/admin\/dish$/,
+    handler: ({ data }) => {
+      const db = load()
+      const row = db.dishes.find((d) => String(d.id) === String(data.id))
+      if (!row) return fail(4004, '菜品不存在或已被删除')
+      Object.assign(row, {
+        name: data.name ?? row.name,
+        categoryId: data.categoryId === undefined ? row.categoryId : String(data.categoryId),
+        price: data.price === undefined ? row.price : Number(data.price),
+        image: data.image === undefined ? row.image : data.image,
+        description: data.description === undefined ? row.description : data.description,
+        status: data.status === undefined ? row.status : Number(data.status),
+        flavors: data.flavors === undefined ? row.flavors : data.flavors,
+        updateTime: new Date().toISOString()
+      })
+      save(db)
+      return ok(row)
+    }
+  },
+  {
+    method: 'delete',
+    url: /^\/admin\/dish\/(\w+)$/,
+    handler: ({ match }) => {
+      const db = load()
+      const before = db.dishes.length
+      db.dishes = db.dishes.filter((d) => String(d.id) !== String(match[1]))
+      save(db)
+      return before === db.dishes.length ? fail(4004, '菜品不存在') : ok(true)
+    }
+  },
+  {
+    method: 'put',
+    url: /^\/admin\/dish\/(\w+)\/status$/,
+    handler: ({ match, params }) => {
+      const db = load()
+      const row = db.dishes.find((d) => String(d.id) === String(match[1]))
+      if (!row) return fail(4004, '菜品不存在')
+      row.status = Number(params?.status) === 0 ? 0 : 1
+      row.updateTime = new Date().toISOString()
+      save(db)
+      return ok(row)
+    }
+  },
+
+  /* ---------------- 图片上传（演示环境用内联 SVG 顶替）---------------- */
+  {
+    method: 'post',
+    url: /^\/admin\/upload$/,
+    handler: () =>
+      ok({
+        url:
+          'data:image/svg+xml;charset=utf-8,' +
+          encodeURIComponent(
+            '<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96">' +
+              '<rect width="96" height="96" rx="10" fill="#94a3b8"/>' +
+              '<text x="48" y="60" font-size="34" text-anchor="middle" fill="#fff">图</text></svg>'
+          )
+      })
   },
 
   /* ---------------- 统计看板 ---------------- */
