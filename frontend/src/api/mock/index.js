@@ -11,12 +11,14 @@ const DELAY = [120, 360]
 const ok = (data) => ({ code: 0, msg: 'ok', data })
 const fail = (code, msg) => ({ code, msg, data: null })
 
-const STORE_KEY = 'dcy_mock_db'
-
-const ROLE_TEXT = { ADMIN: 'ADMIN', STAFF: 'STAFF' }
+/** 数据结构变化时改版本号，旧的 localStorage 数据自动作废 */
+const STORE_KEY = 'dcy_mock_db_v2'
 
 function seed() {
   const now = Date.now()
+  const ago = (h) => new Date(now - h * 36e5).toISOString()
+
+  /* ---------------- 员工 ---------------- */
   const names = [
     ['admin', '刘添祺', 'ADMIN', 1],
     ['zhangsan', '张三', 'STAFF', 1],
@@ -29,35 +31,77 @@ function seed() {
     ['zhengshi', '郑十', 'STAFF', 1],
     ['chenyi', '陈一', 'STAFF', 1]
   ]
-  const rows = names.map(([username, name, role, status], i) => ({
+  const employees = names.map(([username, name, role, status], i) => ({
     id: String(1001 + i),
     username,
     name,
     phone: `1380000${String(1000 + i)}`,
     role,
     status,
-    lastLoginTime: new Date(now - i * 36e5 * 7).toISOString(),
-    updateTime: new Date(now - i * 36e5 * 3).toISOString()
+    lastLoginTime: ago(i * 7),
+    updateTime: ago(i * 3)
   }))
   for (let i = 10; i < 24; i++) {
-    rows.push({
+    employees.push({
       id: String(1001 + i),
       username: `staff${i}`,
       name: `员工${i}`,
       phone: `1390000${String(2000 + i)}`,
       role: 'STAFF',
       status: i % 3 === 0 ? 0 : 1,
-      lastLoginTime: new Date(now - i * 36e5 * 11).toISOString(),
-      updateTime: new Date(now - i * 36e5 * 5).toISOString()
+      lastLoginTime: ago(i * 11),
+      updateTime: ago(i * 5)
     })
   }
-  return { employees: rows, seq: 1001 + rows.length }
+
+  /* ---------------- 分类（type 1=菜品 2=套餐）---------------- */
+  const rawCats = [
+    ['热菜', 1, 1, 1, 24],
+    ['凉菜', 1, 2, 1, 11],
+    ['主食', 1, 3, 1, 9],
+    ['汤品', 1, 4, 1, 6],
+    ['饮品', 1, 5, 1, 12],
+    ['甜点', 1, 6, 1, 5],
+    ['小吃', 1, 7, 0, 0],
+    ['单人套餐', 2, 1, 1, 4],
+    ['双人套餐', 2, 2, 1, 3],
+    ['家庭套餐', 2, 3, 1, 2],
+    ['节日套餐', 2, 4, 0, 0]
+  ]
+  const categories = rawCats.map(([name, type, sort, status, dishCount], i) => ({
+    id: String(2001 + i),
+    name,
+    type,
+    sort,
+    status,
+    dishCount,
+    updateTime: ago(i * 9)
+  }))
+
+  /* ---------------- 口味（按分类挂）---------------- */
+  const flavors = {
+    2001: [
+      { name: '辣度', values: [{ name: '不辣' }, { name: '微辣' }, { name: '中辣' }, { name: '特辣' }] },
+      { name: '份量', values: [{ name: '小份' }, { name: '大份' }] }
+    ],
+    2002: [{ name: '口味', values: [{ name: '清淡' }, { name: '重口' }] }],
+    2005: [
+      { name: '温度', values: [{ name: '常温' }, { name: '加冰' }, { name: '加热' }] },
+      { name: '甜度', values: [{ name: '无糖' }, { name: '半糖' }, { name: '全糖' }] }
+    ],
+    2003: [{ name: '份量', values: [{ name: '小碗' }, { name: '大碗' }] }]
+  }
+
+  return { employees, categories, flavors, seqEmp: 1001 + employees.length, seqCat: 2001 + categories.length }
 }
 
 function load() {
   try {
     const raw = localStorage.getItem(STORE_KEY)
-    if (raw) return JSON.parse(raw)
+    if (raw) {
+      const db = JSON.parse(raw)
+      if (db && Array.isArray(db.categories)) return db
+    }
   } catch (e) {
     /* 忽略损坏的本地数据 */
   }
@@ -81,10 +125,12 @@ function paginate(rows, { page = 1, pageSize = 10 } = {}) {
   return { total: rows.length, records: rows.slice(start, start + s), page: p, pageSize: s }
 }
 
+const notEmpty = (v) => v !== undefined && v !== null && v !== ''
+
 /* ------------------------------------------------------------------ 路由 */
 
 const routes = [
-  // 认证
+  /* ---------------- 认证 ---------------- */
   {
     method: 'post',
     url: /^\/login$/,
@@ -120,7 +166,7 @@ const routes = [
     }
   },
 
-  // 员工分页
+  /* ---------------- 员工 ---------------- */
   {
     method: 'get',
     url: /^\/employee\/page$/,
@@ -131,15 +177,11 @@ const routes = [
       if (name) rows = rows.filter((r) => (r.name || '').includes(name))
       if (username) rows = rows.filter((r) => (r.username || '').includes(username))
       if (role) rows = rows.filter((r) => r.role === role)
-      if (status !== undefined && status !== null && status !== '') {
-        rows = rows.filter((r) => Number(r.status) === Number(status))
-      }
+      if (notEmpty(status)) rows = rows.filter((r) => Number(r.status) === Number(status))
       rows.sort((a, b) => (a.updateTime < b.updateTime ? 1 : -1))
       return ok(paginate(rows, params))
     }
   },
-
-  // 新增员工
   {
     method: 'post',
     url: /^\/employee$/,
@@ -149,12 +191,12 @@ const routes = [
         return fail(4001, '账号已存在，请换一个')
       }
       const row = {
-        id: String(db.seq++),
+        id: String(db.seqEmp++),
         username: data.username,
         name: data.name,
         phone: data.phone || '',
-        role: ROLE_TEXT[data.role] ? data.role : 'STAFF',
-        status: data.status === 0 ? 0 : 1,
+        role: data.role === 'ADMIN' ? 'ADMIN' : 'STAFF',
+        status: Number(data.status) === 0 ? 0 : 1,
         lastLoginTime: null,
         updateTime: new Date().toISOString()
       }
@@ -163,8 +205,6 @@ const routes = [
       return ok(row)
     }
   },
-
-  // 修改员工
   {
     method: 'put',
     url: /^\/employee$/,
@@ -183,23 +223,18 @@ const routes = [
       return ok(row)
     }
   },
-
-  // 删除员工
   {
     method: 'delete',
     url: /^\/employee\/(\w+)$/,
     handler: ({ match }) => {
       const db = load()
-      const id = match[1]
-      if (id === '1001') return fail(4002, '超级管理员不允许删除')
+      if (match[1] === '1001') return fail(4002, '超级管理员不允许删除')
       const before = db.employees.length
-      db.employees = db.employees.filter((r) => String(r.id) !== String(id))
+      db.employees = db.employees.filter((r) => String(r.id) !== String(match[1]))
       save(db)
       return before === db.employees.length ? fail(4004, '员工不存在') : ok(true)
     }
   },
-
-  // 启用/停用
   {
     method: 'put',
     url: /^\/employee\/(\w+)\/status$/,
@@ -214,7 +249,112 @@ const routes = [
     }
   },
 
-  // 统计看板（占位数据，等后端接口好了替换）
+  /* ---------------- 分类 ---------------- */
+  {
+    method: 'get',
+    url: /^\/category\/page$/,
+    handler: ({ params }) => {
+      const db = load()
+      let rows = db.categories.slice()
+      const { type, name, status } = params || {}
+      if (notEmpty(type)) rows = rows.filter((r) => Number(r.type) === Number(type))
+      if (name) rows = rows.filter((r) => (r.name || '').includes(name))
+      if (notEmpty(status)) rows = rows.filter((r) => Number(r.status) === Number(status))
+      rows.sort((a, b) => Number(a.sort) - Number(b.sort) || (a.id < b.id ? 1 : -1))
+      return ok(paginate(rows, params))
+    }
+  },
+  {
+    method: 'post',
+    url: /^\/category$/,
+    handler: ({ data }) => {
+      const db = load()
+      const type = Number(data.type) === 2 ? 2 : 1
+      if (db.categories.some((r) => r.type === type && r.name === data.name)) {
+        return fail(4001, '同类下已存在同名分类')
+      }
+      const row = {
+        id: String(db.seqCat++),
+        name: (data.name || '').trim(),
+        type,
+        sort: Number(data.sort) || 1,
+        status: Number(data.status) === 0 ? 0 : 1,
+        dishCount: 0,
+        updateTime: new Date().toISOString()
+      }
+      db.categories.push(row)
+      save(db)
+      return ok(row)
+    }
+  },
+  {
+    method: 'put',
+    url: /^\/category$/,
+    handler: ({ data }) => {
+      const db = load()
+      const row = db.categories.find((r) => String(r.id) === String(data.id))
+      if (!row) return fail(4004, '分类不存在或已被删除')
+      Object.assign(row, {
+        name: data.name ?? row.name,
+        sort: data.sort === undefined ? row.sort : Number(data.sort),
+        status: data.status === undefined ? row.status : Number(data.status),
+        updateTime: new Date().toISOString()
+      })
+      save(db)
+      return ok(row)
+    }
+  },
+  {
+    method: 'delete',
+    url: /^\/category\/(\w+)$/,
+    handler: ({ match }) => {
+      const db = load()
+      const row = db.categories.find((r) => String(r.id) === String(match[1]))
+      if (!row) return fail(4004, '分类不存在')
+      if (Number(row.dishCount) > 0) {
+        return fail(4001, `该分类下还有 ${row.dishCount} 个${row.type === 2 ? '套餐' : '菜品'}，无法删除`)
+      }
+      db.categories = db.categories.filter((r) => String(r.id) !== String(match[1]))
+      delete db.flavors[match[1]]
+      save(db)
+      return ok(true)
+    }
+  },
+
+  /* ---------------- 口味（按分类整体覆盖）---------------- */
+  {
+    method: 'get',
+    url: /^\/flavor\/(\w+)$/,
+    handler: ({ match }) => {
+      const db = load()
+      const cat = db.categories.find((r) => String(r.id) === String(match[1]))
+      if (!cat) return fail(4004, '分类不存在')
+      return ok({ categoryId: String(match[1]), flavors: db.flavors[match[1]] || [] })
+    }
+  },
+  {
+    method: 'put',
+    url: /^\/flavor\/(\w+)$/,
+    handler: ({ match, data }) => {
+      const db = load()
+      const cat = db.categories.find((r) => String(r.id) === String(match[1]))
+      if (!cat) return fail(4004, '分类不存在')
+      const flavors = (data?.flavors || [])
+        .map((f) => ({
+          name: (f.name || '').trim(),
+          values: (f.values || []).map((v) => ({ name: (v.name || '').trim() })).filter((v) => v.name)
+        }))
+        .filter((f) => f.name)
+      if (flavors.some((f) => f.values.length === 0)) {
+        return fail(1001, '每个口味至少要有一个口味值')
+      }
+      db.flavors[match[1]] = flavors
+      save(db)
+      return ok({ categoryId: String(match[1]), flavors })
+    }
+  },
+
+  /* ---------------- 统计看板 ---------------- */
   {
     method: 'get',
     url: /^\/statistics\/overview$/,

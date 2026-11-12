@@ -17,6 +17,12 @@ export const ROLE_LABEL = {
   [ROLE.STAFF]: '员工'
 }
 
+/** 通用启用/停用（分类、账号等共用） */
+export const ENABLE_STATUS_MAP = {
+  1: { text: '启用', type: 'success' },
+  0: { text: '停用', type: 'info' }
+}
+
 /** 账号状态 */
 export const EMPLOYEE_STATUS = {
   ENABLED: 1,

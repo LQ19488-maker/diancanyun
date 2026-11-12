@@ -25,8 +25,7 @@ export const adminRoutes = [
   {
     path: 'category',
     name: 'category',
-    component: () => import('@/views/ComingSoon.vue'),
-    props: { title: '分类管理' },
+    component: () => import('@/views/category/index.vue'),
     meta: { title: '分类管理', icon: 'Files', menu: true, roles: ['ADMIN'] }
   },
   {

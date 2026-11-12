@@ -7,9 +7,10 @@
  */
 import auth from './adapters/auth'
 import employee from './adapters/employee'
+import category from './adapters/category'
 import statistics from './adapters/statistics'
 
-const api = { auth, employee, statistics }
+const api = { auth, employee, category, statistics }
 
 export default api
 export { IS_MOCK, resolveFileUrl } from './http'
