@@ -43,8 +43,7 @@ export const adminRoutes = [
   {
     path: 'order',
     name: 'order',
-    component: () => import('@/views/ComingSoon.vue'),
-    props: { title: '订单管理' },
+    component: () => import('@/views/order/index.vue'),
     meta: { title: '订单管理', icon: 'List', menu: true, roles: ['ADMIN', 'STAFF'] }
   }
 ]

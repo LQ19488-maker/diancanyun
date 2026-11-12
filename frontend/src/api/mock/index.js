@@ -161,8 +161,76 @@ function seed() {
     updateTime: ago(i * 6 + 2)
   }))
 
+  /* ---------------- 订单 ---------------- */
+  const ORDER_FLOW = ['PENDING', 'ACCEPTED', 'DELIVERING', 'DONE']
+  const CUSTOMERS = [
+    ['王小明', '13800001111', '3 号桌'],
+    ['李静', '13900002222', '7 号桌'],
+    ['张伟', '13700003333', '打包带走'],
+    ['刘敏', '13600004444', '1 号桌'],
+    ['陈晨', '13500005555', '12 号桌'],
+    ['赵磊', '13400006666', '打包带走'],
+    ['孙悦', '13300007777', '5 号桌'],
+    ['周涛', '13200008888', '9 号桌']
+  ]
+  const pickDishes = (seed) => {
+    const n = 1 + (seed % 3)
+    const picked = []
+    for (let k = 0; k < n; k++) {
+      const d = dishes[(seed * 3 + k * 7) % dishes.length]
+      const qty = 1 + ((seed + k) % 2)
+      picked.push({
+        dishId: String(d.id),
+        dishName: d.name,
+        quantity: qty,
+        unitPrice: Number(d.price),
+        amount: Number((d.price * qty).toFixed(2)),
+        flavors: (d.flavors || []).map((f) => `${f.name}:${(f.values || []).join('/')}`).filter(Boolean)
+      })
+    }
+    return picked
+  }
+  const orders = []
+  for (let i = 0; i < 28; i++) {
+    const [userName, phone, tableNo] = CUSTOMERS[i % CUSTOMERS.length]
+    const items = pickDishes(i + 1)
+    const amount = Number(items.reduce((t, x) => t + x.amount, 0).toFixed(2))
+    const packFee = tableNo === '打包带走' ? 2 : 0
+    // 前 20 条铺满各状态，后面几条集中在待接单，方便演示
+    const status = i < 20 ? ORDER_FLOW[i % 4] : i % 5 === 0 ? 'CANCELED' : 'PENDING'
+    const createdAt = new Date(now - (i * 47 + 5) * 60000).toISOString()
+    const idx = ORDER_FLOW.indexOf(status)
+    const timeline = [{ status: 'PENDING', time: createdAt }]
+    for (let k = 1; k <= (idx === -1 ? 0 : idx); k++) {
+      timeline.push({
+        status: ORDER_FLOW[k],
+        time: new Date(new Date(createdAt).getTime() + k * 9 * 60000).toISOString()
+      })
+    }
+    if (status === 'CANCELED') {
+      timeline.push({ status: 'CANCELED', time: new Date(new Date(createdAt).getTime() + 4 * 60000).toISOString() })
+    }
+    orders.push({
+      id: String(5001 + i),
+      orderNo: 'DC' + String(now).slice(-6) + String(1001 + i),
+      userName,
+      phone,
+      tableNo,
+      address: tableNo === '打包带走' ? '北京市海淀区中关村大街 1 号 A 座 1201' : '',
+      items,
+      amount,
+      packFee,
+      totalAmount: Number((amount + packFee).toFixed(2)),
+      remark: i % 5 === 0 ? '不要香菜，少放辣' : '',
+      payStatus: i % 4 === 3 ? 'UNPAID' : 'PAID',
+      status,
+      createdAt,
+      timeline
+    })
+  }
+
   return {
-    employees, categories, flavors, dishes, combos,
+    employees, categories, flavors, dishes, combos, orders,
     seqEmp: 1001 + employees.length,
     seqCat: 2001 + categories.length,
     seqDish: 3001 + dishes.length,
@@ -622,6 +690,74 @@ const routes = [
       if (!row) return fail(4004, '套餐不存在')
       row.status = Number(params?.status) === 0 ? 0 : 1
       row.updateTime = new Date().toISOString()
+      save(db)
+      return ok(row)
+    }
+  },
+
+  /* ---------------- 订单 ---------------- */
+  {
+    method: 'get',
+    url: /^\/admin\/order\/status-count$/,
+    handler: () => {
+      const db = load()
+      const rows = db.orders || []
+      const out = { ALL: rows.length, PENDING: 0, ACCEPTED: 0, DELIVERING: 0, DONE: 0, CANCELED: 0 }
+      rows.forEach((r) => {
+        out[r.status] = (out[r.status] || 0) + 1
+      })
+      return ok(out)
+    }
+  },
+  {
+    method: 'get',
+    url: /^\/admin\/order\/page$/,
+    handler: ({ params }) => {
+      const db = load()
+      let rows = (db.orders || []).slice()
+      const { orderNo, phone, status, startTime, endTime } = params || {}
+      if (orderNo) rows = rows.filter((r) => (r.orderNo || '').includes(orderNo))
+      if (phone) rows = rows.filter((r) => (r.phone || '').includes(phone))
+      if (notEmpty(status)) rows = rows.filter((r) => r.status === status)
+      if (startTime) rows = rows.filter((r) => r.createdAt >= startTime)
+      // 前端会传 23:59:59，这里按字符串比较即可（ISO 与 yyyy-MM-dd HH:mm:ss 统一转一下）
+      if (endTime) {
+        const endMs = new Date(String(endTime).replace(' ', 'T')).getTime()
+        rows = rows.filter((r) => new Date(r.createdAt).getTime() <= endMs)
+      }
+      rows.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
+      return ok(paginate(rows, params))
+    }
+  },
+  {
+    method: 'get',
+    url: /^\/admin\/order\/(\w+)$/,
+    handler: ({ match }) => {
+      const db = load()
+      const row = (db.orders || []).find((o) => String(o.id) === String(match[1]))
+      return row ? ok(row) : fail(4004, '订单不存在')
+    }
+  },
+  {
+    method: 'put',
+    url: /^\/admin\/order\/(\w+)\/status$/,
+    handler: ({ match, data }) => {
+      const db = load()
+      const row = (db.orders || []).find((o) => String(o.id) === String(match[1]))
+      if (!row) return fail(4004, '订单不存在')
+      const TRANSITIONS = {
+        PENDING: ['ACCEPTED', 'CANCELED'],
+        ACCEPTED: ['DELIVERING', 'CANCELED'],
+        DELIVERING: ['DONE'],
+        DONE: [],
+        CANCELED: []
+      }
+      const next = (data && data.status) || ''
+      if (!(TRANSITIONS[row.status] || []).includes(next)) {
+        return fail(4001, `订单当前状态（${row.status}）不允许流转到 ${next || '空'}`)
+      }
+      row.status = next
+      row.timeline = [...(row.timeline || []), { status: next, time: new Date().toISOString() }]
       save(db)
       return ok(row)
     }
