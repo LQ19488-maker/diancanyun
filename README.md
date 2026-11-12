@@ -3,7 +3,7 @@
 > 课程项目（团队协作）· 本仓库为单库结构：`frontend/`（前端，LTQ）+ `backend/`（后端，Spring Boot）+ `docs/`
 
 在线演示（前端演示版，内置演示数据、无需后端）：
-`https://<你的账号>.github.io/diancanyun/`
+`https://lq19488-maker.github.io/diancanyun/`
 演示账号：`admin / admin1234`（管理员）、`staff / staff1234`（员工）
 
 ---
