@@ -1,0 +1,32 @@
+# ---------- Node / 前端 ----------
+node_modules/
+dist/
+.vite/
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.local
+
+# ---------- 环境变量（真值不入库，只提交 .env.example）----------
+.env
+.env.local
+.env.*.local
+
+# ---------- 后端（Spring Boot）----------
+target/
+*.class
+*.jar
+!.mvn/wrapper/maven-wrapper.jar
+backend/src/main/resources/application-local.yml
+*.log
+
+# ---------- 编辑器 / 系统 ----------
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ---------- 临时 ----------
+.tmp/

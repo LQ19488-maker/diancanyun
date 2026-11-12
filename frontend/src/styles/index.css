@@ -1,0 +1,80 @@
+/* 全站基础样式：只做 reset 与少量公共类，页面细节交给 Element Plus */
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+  font-size: 14px;
+  color: #1f2937;
+  background: #f5f7fa;
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+/* 数字列统一等宽，金额右对齐看着才整齐 */
+.num {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum';
+}
+
+.text-right {
+  text-align: right;
+}
+
+.text-muted {
+  color: #8c93a1;
+  font-size: 12px;
+}
+
+.page-wrap {
+  padding: 16px;
+}
+
+.mb-12 {
+  margin-bottom: 12px;
+}
+
+/* 骨架屏（加载态统一用它，不用转圈） */
+.skeleton-block {
+  background: linear-gradient(90deg, #eef1f6 25%, #e3e8f0 37%, #eef1f6 63%);
+  background-size: 400% 100%;
+  animation: skeleton-loading 1.4s ease infinite;
+  border-radius: 4px;
+  height: 16px;
+  margin: 8px 0;
+}
+
+@keyframes skeleton-loading {
+  0% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0 50%;
+  }
+}
+
+/* 演示环境角标 */
+.demo-flag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 12px;
+  color: #b45309;
+  background: #fdf3e3;
+  border: 1px solid #f0d0a0;
+}
