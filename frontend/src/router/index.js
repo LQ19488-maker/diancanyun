@@ -37,8 +37,7 @@ export const adminRoutes = [
   {
     path: 'combo',
     name: 'combo',
-    component: () => import('@/views/ComingSoon.vue'),
-    props: { title: '套餐管理' },
+    component: () => import('@/views/combo/index.vue'),
     meta: { title: '套餐管理', icon: 'Box', menu: true, roles: ['ADMIN'] }
   },
   {

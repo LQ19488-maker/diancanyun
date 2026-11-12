@@ -9,10 +9,11 @@ import auth from './adapters/auth'
 import employee from './adapters/employee'
 import category from './adapters/category'
 import dish from './adapters/dish'
+import combo from './adapters/combo'
 import upload from './adapters/upload'
 import statistics from './adapters/statistics'
 
-const api = { auth, employee, category, dish, upload, statistics }
+const api = { auth, employee, category, dish, combo, upload, statistics }
 
 export default api
 export { IS_MOCK, resolveFileUrl } from './http'

@@ -140,11 +140,33 @@ function seed() {
     updateTime: ago(i * 4 + 1)
   }))
 
+  /* ---------------- 套餐（引用菜品 id）---------------- */
+  const rawCombos = [
+    ['单人A餐', 2008, 38.0, ['3001', '3010', '3016'], 1],
+    ['单人B餐', 2008, 42.0, ['3003', '3010', '3019'], 1],
+    ['双人超值餐', 2009, 88.0, ['3001', '3004', '3011', '3010', '3017'], 1],
+    ['双人轻食餐', 2009, 76.0, ['3007', '3009', '3018', '3010'], 1],
+    ['家庭欢聚餐', 2010, 168.0, ['3006', '3005', '3011', '3010', '3019', '3020'], 1],
+    ['节日限定餐', 2011, 128.0, ['3002', '3004', '3021', '3022'], 0]
+  ]
+  const combos = rawCombos.map(([name, categoryId, price, dishIds, status], i) => ({
+    id: String(4001 + i),
+    name,
+    categoryId: String(categoryId),
+    price,
+    dishIds,
+    image: thumb(name.slice(0, 1), palette[(i + 3) % palette.length]),
+    description: `${name}，含 ${dishIds.length} 道菜`,
+    status,
+    updateTime: ago(i * 6 + 2)
+  }))
+
   return {
-    employees, categories, flavors, dishes,
+    employees, categories, flavors, dishes, combos,
     seqEmp: 1001 + employees.length,
     seqCat: 2001 + categories.length,
-    seqDish: 3001 + dishes.length
+    seqDish: 3001 + dishes.length,
+    seqCombo: 4001 + combos.length
   }
 }
 
@@ -486,6 +508,118 @@ const routes = [
       const db = load()
       const row = db.dishes.find((d) => String(d.id) === String(match[1]))
       if (!row) return fail(4004, '菜品不存在')
+      row.status = Number(params?.status) === 0 ? 0 : 1
+      row.updateTime = new Date().toISOString()
+      save(db)
+      return ok(row)
+    }
+  },
+
+  /* ---------------- 套餐 ---------------- */
+  {
+    method: 'get',
+    url: /^\/admin\/combo\/page$/,
+    handler: ({ params }) => {
+      const db = load()
+      const catName = (id) => (db.categories.find((c) => String(c.id) === String(id)) || {}).name || ''
+      const dishById = (id) => (db.dishes || []).find((d) => String(d.id) === String(id))
+      let rows = (db.combos || []).map((c) => {
+        const dishes = (c.dishIds || []).map(dishById).filter(Boolean)
+        return {
+          ...c,
+          categoryName: catName(c.categoryId),
+          dishCount: dishes.length,
+          dishes: dishes.map((d) => ({ id: String(d.id), name: d.name, price: d.price })),
+          originPrice: Number(dishes.reduce((s, d) => s + Number(d.price || 0), 0).toFixed(2))
+        }
+      })
+      const { name, categoryId, status } = params || {}
+      if (name) rows = rows.filter((r) => (r.name || '').includes(name))
+      if (notEmpty(categoryId)) rows = rows.filter((r) => String(r.categoryId) === String(categoryId))
+      if (notEmpty(status)) rows = rows.filter((r) => Number(r.status) === Number(status))
+      rows.sort((a, b) => (a.updateTime < b.updateTime ? 1 : -1))
+      return ok(paginate(rows, params))
+    }
+  },
+  {
+    method: 'get',
+    url: /^\/admin\/combo\/(\w+)$/,
+    handler: ({ match }) => {
+      const db = load()
+      const row = (db.combos || []).find((c) => String(c.id) === String(match[1]))
+      if (!row) return fail(4004, '套餐不存在')
+      const dishById = (id) => (db.dishes || []).find((d) => String(d.id) === String(id))
+      return ok({
+        ...row,
+        dishes: (row.dishIds || []).map(dishById).filter(Boolean)
+      })
+    }
+  },
+  {
+    method: 'post',
+    url: /^\/admin\/combo$/,
+    handler: ({ data }) => {
+      const db = load()
+      const cat = db.categories.find((c) => String(c.id) === String(data.categoryId))
+      if (!cat || Number(cat.type) !== 2) return fail(1001, '请选择套餐分类（菜品分类不能放套餐）')
+      if (!data.dishIds || !data.dishIds.length) return fail(1001, '套餐至少要选 1 个菜品')
+      if (db.combos.some((c) => c.name === data.name)) return fail(4001, '已存在同名套餐')
+      const row = {
+        id: String(db.seqCombo++),
+        name: (data.name || '').trim(),
+        categoryId: String(data.categoryId),
+        price: Number(data.price) || 0,
+        dishIds: data.dishIds.map(String),
+        image: data.image || '',
+        description: data.description || '',
+        status: Number(data.status) === 0 ? 0 : 1,
+        updateTime: new Date().toISOString()
+      }
+      db.combos.unshift(row)
+      save(db)
+      return ok(row)
+    }
+  },
+  {
+    method: 'put',
+    url: /^\/admin\/combo$/,
+    handler: ({ data }) => {
+      const db = load()
+      const row = db.combos.find((c) => String(c.id) === String(data.id))
+      if (!row) return fail(4004, '套餐不存在或已被删除')
+      if (data.dishIds && !data.dishIds.length) return fail(1001, '套餐至少要选 1 个菜品')
+      Object.assign(row, {
+        name: data.name ?? row.name,
+        categoryId: data.categoryId === undefined ? row.categoryId : String(data.categoryId),
+        price: data.price === undefined ? row.price : Number(data.price),
+        dishIds: data.dishIds === undefined ? row.dishIds : data.dishIds.map(String),
+        image: data.image === undefined ? row.image : data.image,
+        description: data.description === undefined ? row.description : data.description,
+        status: data.status === undefined ? row.status : Number(data.status),
+        updateTime: new Date().toISOString()
+      })
+      save(db)
+      return ok(row)
+    }
+  },
+  {
+    method: 'delete',
+    url: /^\/admin\/combo\/(\w+)$/,
+    handler: ({ match }) => {
+      const db = load()
+      const before = (db.combos || []).length
+      db.combos = (db.combos || []).filter((c) => String(c.id) !== String(match[1]))
+      save(db)
+      return before === db.combos.length ? fail(4004, '套餐不存在') : ok(true)
+    }
+  },
+  {
+    method: 'put',
+    url: /^\/admin\/combo\/(\w+)\/status$/,
+    handler: ({ match, params }) => {
+      const db = load()
+      const row = (db.combos || []).find((c) => String(c.id) === String(match[1]))
+      if (!row) return fail(4004, '套餐不存在')
       row.status = Number(params?.status) === 0 ? 0 : 1
       row.updateTime = new Date().toISOString()
       save(db)

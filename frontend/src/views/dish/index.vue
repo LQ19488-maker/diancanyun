@@ -110,7 +110,7 @@
       destroy-on-close
       top="6vh"
     >
-      <el-form ref="crud.formRef" :model="crud.form" :rules="dishRules" label-width="100px">
+      <el-form ref="crud.formRef" :model="crud.form" :rules="dishRules" label-width="108px">
         <el-row :gutter="16">
           <el-col :span="12">
             <el-form-item label="菜品名称" prop="name">
