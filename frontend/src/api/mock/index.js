@@ -198,17 +198,18 @@ function seed() {
     const packFee = tableNo === '打包带走' ? 2 : 0
     // 前 20 条铺满各状态，后面几条集中在待接单，方便演示
     const status = i < 20 ? ORDER_FLOW[i % 4] : i % 5 === 0 ? 'CANCELED' : 'PENDING'
-    const createdAt = new Date(now - (i * 47 + 5) * 60000).toISOString()
+    // 摊到近 30 天，趋势图才有内容
+    const createdAt = new Date(now - (i * 0.85 * 86400 + 1800) * 1000).toISOString()
     const idx = ORDER_FLOW.indexOf(status)
     const timeline = [{ status: 'PENDING', time: createdAt }]
     for (let k = 1; k <= (idx === -1 ? 0 : idx); k++) {
       timeline.push({
         status: ORDER_FLOW[k],
-        time: new Date(new Date(createdAt).getTime() + k * 9 * 60000).toISOString()
+        time: new Date(new Date(createdAt).getTime() + k * 9 * 3600000).toISOString()
       })
     }
     if (status === 'CANCELED') {
-      timeline.push({ status: 'CANCELED', time: new Date(new Date(createdAt).getTime() + 4 * 60000).toISOString() })
+      timeline.push({ status: 'CANCELED', time: new Date(new Date(createdAt).getTime() + 4 * 3600000).toISOString() })
     }
     orders.push({
       id: String(5001 + i),
@@ -782,17 +783,62 @@ const routes = [
   /* ---------------- 统计看板 ---------------- */
   {
     method: 'get',
-    url: /^\/admin\/statistics\/overview$/, 
-    handler: () =>
-      ok({
-        turnover: 4820.5,
-        orderCount: 128,
-        avgPrice: 37.66,
-        finishRate: 0.94,
-        trend: [],
-        statusDist: [],
-        hotDishes: []
+    url: /^\/admin\/statistics\/overview$/,
+    handler: () => {
+      const db = load()
+      const orders = db.orders || []
+      const nowMs = Date.now()
+
+      // 近 30 天趋势：营业额只算已完成，订单量算未取消
+      const trendMap = new Map()
+      for (let i = 29; i >= 0; i--) {
+        const key = new Date(nowMs - i * 86400000).toISOString().slice(0, 10)
+        trendMap.set(key, { date: key, turnover: 0, orderCount: 0 })
+      }
+      orders.forEach((o) => {
+        const row = trendMap.get(String(o.createdAt).slice(0, 10))
+        if (!row || o.status === 'CANCELED') return
+        row.orderCount += 1
+        if (o.status === 'DONE') {
+          row.turnover = Number((row.turnover + Number(o.totalAmount || 0)).toFixed(2))
+        }
       })
+      const trend = [...trendMap.values()]
+
+      // 状态分布
+      const dist = new Map()
+      orders.forEach((o) => dist.set(o.status, (dist.get(o.status) || 0) + 1))
+      const statusDist = ['PENDING', 'ACCEPTED', 'DELIVERING', 'DONE', 'CANCELED']
+        .map((st) => ({ status: st, count: dist.get(st) || 0 }))
+        .filter((x) => x.count > 0)
+
+      // 热销菜品：按份数汇总
+      const hot = new Map()
+      orders
+        .filter((o) => o.status !== 'CANCELED')
+        .forEach((o) => {
+          ;(o.items || []).forEach((it) => {
+            const cur = hot.get(it.dishName) || { name: it.dishName, count: 0, amount: 0 }
+            cur.count += Number(it.quantity || 0)
+            cur.amount = Number((cur.amount + Number(it.amount || 0)).toFixed(2))
+            hot.set(it.dishName, cur)
+          })
+        })
+      const hotDishes = [...hot.values()].sort((a, b) => b.count - a.count).slice(0, 10)
+
+      const doneList = orders.filter((o) => o.status === 'DONE')
+      const turnover = Number(doneList.reduce((sum, o) => sum + Number(o.totalAmount || 0), 0).toFixed(2))
+
+      return ok({
+        turnover,
+        orderCount: orders.length,
+        avgPrice: doneList.length ? Number((turnover / doneList.length).toFixed(2)) : 0,
+        finishRate: orders.length ? Number((doneList.length / orders.length).toFixed(4)) : 0,
+        trend,
+        statusDist,
+        hotDishes
+      })
+    }
   }
 ]
 
