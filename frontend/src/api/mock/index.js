@@ -696,6 +696,106 @@ const routes = [
     }
   },
 
+  /* ---------------- 用户端（H5，前缀 /user）---------------- */
+  {
+    method: 'get',
+    url: /^\/user\/menu$/,
+    handler: () => {
+      const db = load()
+      const cats = (db.categories || []).filter((c) => Number(c.type) === 1 && Number(c.status) === 1)
+      const catIds = new Set(cats.map((c) => String(c.id)))
+      const dishes = (db.dishes || [])
+        .filter((d) => Number(d.status) === 1 && catIds.has(String(d.categoryId)))
+        .map((d) => ({
+          id: String(d.id),
+          name: d.name,
+          categoryId: String(d.categoryId),
+          price: d.price,
+          image: d.image,
+          description: d.description,
+          flavors: (d.flavors || []).map((f) => ({
+            name: f.name,
+            values: (f.values || []).map((v) => (typeof v === 'string' ? v : v.name))
+          }))
+        }))
+      return ok({
+        categories: cats.map((c) => ({ id: String(c.id), name: c.name })).sort((a, b) => Number(a.id) - Number(b.id)),
+        dishes
+      })
+    }
+  },
+  {
+    method: 'post',
+    url: /^\/user\/order$/,
+    handler: ({ data }) => {
+      const db = load()
+      const body = data || {}
+      const items = (body.items || [])
+        .map((it) => {
+          const dish = (db.dishes || []).find((d) => String(d.id) === String(it.dishId))
+          if (!dish) return null
+          const qty = Number(it.quantity) || 1
+          return {
+            dishId: String(dish.id),
+            dishName: dish.name,
+            quantity: qty,
+            unitPrice: Number(dish.price),
+            amount: Number((dish.price * qty).toFixed(2)),
+            flavors: (it.flavors || [])
+              .map((f) => (f && f.name ? `${f.name}:${f.value}` : ''))
+              .filter(Boolean)
+          }
+        })
+        .filter(Boolean)
+
+      if (!items.length) return fail(1001, '订单里没有有效菜品')
+
+      const amount = Number(items.reduce((t, x) => t + x.amount, 0).toFixed(2))
+      const tableNo = (body.tableNo || '3 号桌').trim()
+      const packFee = tableNo.includes('打包') ? 2 : 0
+      const nowIso = new Date().toISOString()
+      const row = {
+        id: String(db.seqOrder || (5001 + (db.orders || []).length)),
+        orderNo: 'DC' + String(Date.now()).slice(-6) + String((db.orders || []).length + 1001),
+        userName: '顾客',
+        phone: '13800000000',
+        tableNo,
+        address: '',
+        items,
+        amount,
+        packFee,
+        totalAmount: Number((amount + packFee).toFixed(2)),
+        remark: body.remark || '',
+        payStatus: 'UNPAID',
+        status: 'PENDING',
+        createdAt: nowIso,
+        timeline: [{ status: 'PENDING', time: nowIso }]
+      }
+      db.seqOrder = Number(row.id) + 1
+      db.orders = [row, ...(db.orders || [])]
+      save(db)
+      return ok(row)
+    }
+  },
+  {
+    method: 'get',
+    url: /^\/user\/order\/(\w+)$/,
+    handler: ({ match }) => {
+      const db = load()
+      const row = (db.orders || []).find((o) => String(o.id) === String(match[1]))
+      return row ? ok(row) : fail(4004, '订单不存在')
+    }
+  },
+  {
+    method: 'get',
+    url: /^\/user\/orders$/,
+    handler: ({ params }) => {
+      const db = load()
+      const rows = (db.orders || []).slice().sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
+      return ok(paginate(rows, params))
+    }
+  },
+
   /* ---------------- 订单 ---------------- */
   {
     method: 'get',
