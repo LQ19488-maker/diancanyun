@@ -1,4 +1,5 @@
 import { request } from '../http'
+import { adminUrl } from '../urls'
 
 /** 统计看板：营业额、订单量、客单价、完成率 + 三类图表数据 */
 export function toOverview(d = {}) {
@@ -15,7 +16,7 @@ export function toOverview(d = {}) {
 
 export default {
   async overview(params = {}) {
-    return toOverview(await request({ url: '/statistics/overview', method: 'get', params }))
+    return toOverview(await request({ url: adminUrl('/statistics/overview'), method: 'get', params }))
   },
   toOverview
 }

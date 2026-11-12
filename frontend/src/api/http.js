@@ -2,7 +2,8 @@ import axios from 'axios'
 import { mockRequest } from './mock'
 
 export const IS_MOCK = import.meta.env.VITE_USE_MOCK === 'true'
-export const API_BASE = import.meta.env.VITE_API_BASE || '/api'
+// 后端自带 /admin、/user 前缀，所以 base 默认留空（同源相对路径）
+export const API_BASE = import.meta.env.VITE_API_BASE || ''
 export const UPLOAD_BASE = import.meta.env.VITE_UPLOAD_BASE || ''
 
 /** 业务异常：页面 catch 到它，直接用 message 提示即可 */
@@ -20,6 +21,7 @@ export function setUnauthorizedHandler(fn) {
   unauthorizedHandler = fn
 }
 
+// 后端约定 code=200 表示成功；同时兼容 0，便于 mock 与旧接口
 const SUCCESS_CODES = [0, 200]
 
 /**
@@ -34,9 +36,9 @@ export function unwrap(body) {
     const code = Number(body.code)
     if (code === 401 || code === 2002) {
       unauthorizedHandler()
-      throw new BizError(code, body.msg || '登录已过期，请重新登录')
+      throw new BizError(code, body.message || body.msg || '登录已过期，请重新登录')
     }
-    throw new BizError(code, body.msg || body.message || '操作失败')
+    throw new BizError(code, body.message || body.msg || '操作失败')
   }
   return body
 }
@@ -58,7 +60,7 @@ service.interceptors.response.use(
       return Promise.reject(new BizError(401, '登录已过期，请重新登录'))
     }
     const body = err.response?.data
-    const msg = body?.msg || body?.message || err.message || '网络异常，请稍后重试'
+    const msg = body?.message || body?.msg || err.message || '网络异常，请稍后重试'
     return Promise.reject(new BizError(body?.code ?? status ?? -1, msg))
   }
 )

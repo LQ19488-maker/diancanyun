@@ -1,4 +1,5 @@
 import { request } from '../http'
+import { adminUrl } from '../urls'
 
 /** 后端 DTO → 前端 model */
 export function toModel(d = {}) {
@@ -34,27 +35,27 @@ export function fromForm(form = {}, isEdit = false) {
 export default {
   /** 分页查询，统一成 { list, total } 给 ProTable 用 */
   async page(params = {}) {
-    const d = await request({ url: '/employee/page', method: 'get', params })
+    const d = await request({ url: adminUrl('/employee/page'), method: 'get', params })
     const records = d?.records ?? d?.list ?? d?.rows ?? []
     const total = Number(d?.total ?? records.length)
     return { list: records.map(toModel), total }
   },
 
   async create(form) {
-    return toModel(await request({ url: '/employee', method: 'post', data: fromForm(form, false) }))
+    return toModel(await request({ url: adminUrl('/employee'), method: 'post', data: fromForm(form, false) }))
   },
 
   async update(form) {
-    return toModel(await request({ url: '/employee', method: 'put', data: fromForm(form, true) }))
+    return toModel(await request({ url: adminUrl('/employee'), method: 'put', data: fromForm(form, true) }))
   },
 
   async remove(id) {
-    return request({ url: `/employee/${id}`, method: 'delete' })
+    return request({ url: adminUrl(`/employee/${id}`), method: 'delete' })
   },
 
   /** 启用/停用：后端可能是 PUT /employee/{id}/status?status=0|1 */
   async changeStatus(id, status) {
-    return request({ url: `/employee/${id}/status`, method: 'put', params: { status } })
+    return request({ url: adminUrl(`/employee/${id}/status`), method: 'put', params: { status } })
   },
 
   toModel,

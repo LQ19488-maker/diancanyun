@@ -8,8 +8,8 @@
 
 const DELAY = [120, 360]
 
-const ok = (data) => ({ code: 0, msg: 'ok', data })
-const fail = (code, msg) => ({ code, msg, data: null })
+const ok = (data) => ({ code: 200, message: 'ok', data })
+const fail = (code, message) => ({ code, message, data: null })
 
 /** 数据结构变化时改版本号，旧的 localStorage 数据自动作废 */
 const STORE_KEY = 'dcy_mock_db_v2'
@@ -133,7 +133,7 @@ const routes = [
   /* ---------------- 认证 ---------------- */
   {
     method: 'post',
-    url: /^\/login$/,
+    url: /^\/admin\/login$/, 
     handler: ({ data }) => {
       const { username, password } = data || {}
       if (username === 'admin' && password === 'admin1234') {
@@ -153,7 +153,7 @@ const routes = [
   },
   {
     method: 'get',
-    url: /^\/employee\/me$/,
+    url: /^\/admin\/employee\/me$/, 
     handler: () => {
       const token = localStorage.getItem('dcy_token') || ''
       if (token.includes('staff')) {
@@ -169,7 +169,7 @@ const routes = [
   /* ---------------- 员工 ---------------- */
   {
     method: 'get',
-    url: /^\/employee\/page$/,
+    url: /^\/admin\/employee\/page$/, 
     handler: ({ params }) => {
       const db = load()
       let rows = db.employees.slice()
@@ -184,7 +184,7 @@ const routes = [
   },
   {
     method: 'post',
-    url: /^\/employee$/,
+    url: /^\/admin\/employee$/, 
     handler: ({ data }) => {
       const db = load()
       if (db.employees.some((r) => r.username === data.username)) {
@@ -207,7 +207,7 @@ const routes = [
   },
   {
     method: 'put',
-    url: /^\/employee$/,
+    url: /^\/admin\/employee$/, 
     handler: ({ data }) => {
       const db = load()
       const row = db.employees.find((r) => String(r.id) === String(data.id))
@@ -225,7 +225,7 @@ const routes = [
   },
   {
     method: 'delete',
-    url: /^\/employee\/(\w+)$/,
+    url: /^\/admin\/employee\/(\w+)$/, 
     handler: ({ match }) => {
       const db = load()
       if (match[1] === '1001') return fail(4002, '超级管理员不允许删除')
@@ -237,7 +237,7 @@ const routes = [
   },
   {
     method: 'put',
-    url: /^\/employee\/(\w+)\/status$/,
+    url: /^\/admin\/employee\/(\w+)\/status$/, 
     handler: ({ match, params }) => {
       const db = load()
       const row = db.employees.find((r) => String(r.id) === String(match[1]))
@@ -252,7 +252,7 @@ const routes = [
   /* ---------------- 分类 ---------------- */
   {
     method: 'get',
-    url: /^\/category\/page$/,
+    url: /^\/admin\/category\/page$/, 
     handler: ({ params }) => {
       const db = load()
       let rows = db.categories.slice()
@@ -266,7 +266,7 @@ const routes = [
   },
   {
     method: 'post',
-    url: /^\/category$/,
+    url: /^\/admin\/category$/, 
     handler: ({ data }) => {
       const db = load()
       const type = Number(data.type) === 2 ? 2 : 1
@@ -289,7 +289,7 @@ const routes = [
   },
   {
     method: 'put',
-    url: /^\/category$/,
+    url: /^\/admin\/category$/, 
     handler: ({ data }) => {
       const db = load()
       const row = db.categories.find((r) => String(r.id) === String(data.id))
@@ -306,7 +306,7 @@ const routes = [
   },
   {
     method: 'delete',
-    url: /^\/category\/(\w+)$/,
+    url: /^\/admin\/category\/(\w+)$/, 
     handler: ({ match }) => {
       const db = load()
       const row = db.categories.find((r) => String(r.id) === String(match[1]))
@@ -324,7 +324,7 @@ const routes = [
   /* ---------------- 口味（按分类整体覆盖）---------------- */
   {
     method: 'get',
-    url: /^\/flavor\/(\w+)$/,
+    url: /^\/admin\/flavor\/(\w+)$/, 
     handler: ({ match }) => {
       const db = load()
       const cat = db.categories.find((r) => String(r.id) === String(match[1]))
@@ -334,7 +334,7 @@ const routes = [
   },
   {
     method: 'put',
-    url: /^\/flavor\/(\w+)$/,
+    url: /^\/admin\/flavor\/(\w+)$/, 
     handler: ({ match, data }) => {
       const db = load()
       const cat = db.categories.find((r) => String(r.id) === String(match[1]))
@@ -357,7 +357,7 @@ const routes = [
   /* ---------------- 统计看板 ---------------- */
   {
     method: 'get',
-    url: /^\/statistics\/overview$/,
+    url: /^\/admin\/statistics\/overview$/, 
     handler: () =>
       ok({
         turnover: 4820.5,

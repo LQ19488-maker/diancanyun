@@ -24,13 +24,14 @@ export default defineConfig(({ mode }) => {
     },
     server: {
       port: 5173,
-      // 开发时用代理绕开跨域；生产走 Nginx 同域或后端 CORS
+      // 开发时用代理绕开跨域；后端自带 /admin、/user 前缀，所以直接代理这两个
+      // 生产走 Nginx 同域反代（或后端已配好的 CORS）
       proxy: useMock
         ? {}
-        : {
-            '/api': { target: env.VITE_PROXY_TARGET || 'http://127.0.0.1:8080', changeOrigin: true },
-            '/upload': { target: env.VITE_PROXY_TARGET || 'http://127.0.0.1:8080', changeOrigin: true }
-          }
+        : ['/admin', '/user', '/upload', '/api'].reduce((acc, k) => {
+            acc[k] = { target: env.VITE_PROXY_TARGET || 'http://127.0.0.1:8080', changeOrigin: true }
+            return acc
+          }, {})
     },
     build: {
       outDir: 'dist',

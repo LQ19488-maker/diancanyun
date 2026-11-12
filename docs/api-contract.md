@@ -7,6 +7,46 @@
 
 ---
 
+## 〇、与 dandanyun 后端框架的对接现状（2026-11）
+
+后端仓库：<https://github.com/TianCha101/dandanyun>（最小运行框架：统一返回 + 全局异常 + 跨域 + 两套路径前缀，暂无数据库 / Redis / 登录）
+
+### 已经对齐的三条
+
+| 项 | 后端框架 | 前端实现 | 状态 |
+|---|---|---|---|
+| 响应体 | { code: 200, message: ok, data: {} } | http.js 的 unwrap()：code 为 0 或 200 视为成功，取 data；失败用 message（兼容旧字段 msg） | ✅ 已对齐 |
+| 路径前缀 | 管理端 /admin/**、用户端 /user/** | src/api/urls.js 里的 dminUrl() / userUrl()，所有 adapter 都走它 | ✅ 已对齐 |
+| 同源部署 | 端口 8080，自带 CORS | VITE_API_BASE 留空（同源相对路径）；开发时 vite 代理 /admin、/user → 127.0.0.1:8080 | ✅ 已对齐 |
+
+> 换后端只改一个文件：路径前缀在 src/api/urls.js，响应体解包在 src/api/http.js。页面与 adapter 的字段映射不用动。
+
+### 前端需要的接口（按优先级）
+
+| 优先级 | 接口 | 用途 | 备注 |
+|---|---|---|---|
+| P0 | POST /admin/login | 登录，返回 { token, user:{id,username,name,role} } | 没有它前端只能继续用 mock |
+| P0 | GET /admin/employee/me | 当前登录人（角色决定菜单与路由权限） | 角色取值 ADMIN / STAFF |
+| P0 | GET /admin/employee/page、POST/PUT /admin/employee、DELETE /admin/employee/{id}、PUT /admin/employee/{id}/status | 员工管理 | 分页出参请用 { total, records } |
+| P1 | GET /admin/category/page、POST/PUT /admin/category、DELETE /admin/category/{id} | 分类管理 | 被引用时返回业务错误码 + 中文 message |
+| P1 | GET/PUT /admin/flavor/{categoryId} | 口味配置（整体覆盖） | PUT 入参 { flavors:[{name, values:[{name}]}] } |
+| P2 | GET /admin/statistics/overview | 工作台指标卡与图表 | 见 2.3 节出参 |
+| P2 | POST /admin/upload | 菜品图片上传 | 返回 { url } |
+
+### 两条必须提前确认的后端细节
+
+1. **主键 Long 必须序列化成字符串**（雪花 ID 19 位，JS Number 只有 2^53 精度，否则查详情查不到）。
+2. **错误码表**：成功用 200 已知；未登录 / token 过期用哪个 code（401？2002？）、业务冲突用哪个（4001？），需要后端给一份，前端按它决定“跳登录”还是“只弹提示”。
+
+### 联调顺序建议（后端骨架已跑起来之后）
+
+1. 先打 GET /health，确认 8080 可访问（前端可用 Invoke-WebRequest／浏览器直接开）
+2. 再做 POST /admin/login + GET /admin/employee/me，前端把 VITE_USE_MOCK 改成 alse 就能登录
+3. 然后一个列表接口（/admin/employee/page），验证分页字段与 Long 精度
+4. 逐个模块补齐，每补一个就在本文档「已知差异」表里登记一次
+
+---
+
 ## 一、四条通用约定
 
 ### 1.1 统一响应体

@@ -1,4 +1,5 @@
 import { request } from '../http'
+import { adminUrl } from '../urls'
 
 /** 后端 DTO → 前端 model */
 export function toModel(d = {}) {
@@ -35,32 +36,32 @@ export function toFlavors(list = []) {
 
 export default {
   async page(params = {}) {
-    const d = await request({ url: '/category/page', method: 'get', params })
+    const d = await request({ url: adminUrl('/category/page'), method: 'get', params })
     const records = d?.records ?? d?.list ?? []
     return { list: records.map(toModel), total: Number(d?.total ?? records.length) }
   },
 
   async create(form) {
-    return toModel(await request({ url: '/category', method: 'post', data: fromForm(form, false) }))
+    return toModel(await request({ url: adminUrl('/category'), method: 'post', data: fromForm(form, false) }))
   },
 
   async update(form) {
-    return toModel(await request({ url: '/category', method: 'put', data: fromForm(form, true) }))
+    return toModel(await request({ url: adminUrl('/category'), method: 'put', data: fromForm(form, true) }))
   },
 
   async remove(id) {
-    return request({ url: `/category/${id}`, method: 'delete' })
+    return request({ url: adminUrl(`/category/${id}`), method: 'delete' })
   },
 
   /** 某个分类下的口味配置（整体读取 / 整体覆盖保存） */
   async getFlavors(categoryId) {
-    const d = await request({ url: `/flavor/${categoryId}`, method: 'get' })
+    const d = await request({ url: adminUrl(`/flavor/${categoryId}`), method: 'get' })
     return toFlavors(d?.flavors || [])
   },
 
   async saveFlavors(categoryId, flavors) {
     const d = await request({
-      url: `/flavor/${categoryId}`,
+      url: adminUrl(`/flavor/${categoryId}`),
       method: 'put',
       data: { flavors: toFlavors(flavors) }
     })
