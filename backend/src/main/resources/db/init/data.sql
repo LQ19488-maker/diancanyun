@@ -41,17 +41,22 @@ UPDATE sys_user SET
 WHERE username = 'customer';
 
 INSERT IGNORE INTO shop
-    (id, name, image, rating, monthly_sales, min_price, delivery_fee, delivery_time,
-     distance, notice, status, open_menu, tags_json)
+    (id, name, image, rating, monthly_sales, min_price, delivery_fee, full_amount, reduce_amount,
+     delivery_time, distance, notice, status, open_menu, tags_json)
 VALUES
-    (10001, '川味小馆', '', 4.9, 2380, 20.00, 5.00, 30, '1.2km',
+    (10001, '川味小馆', '', 4.9, 2380, 20.00, 5.00, 30.00, 5.00, 30, '1.2km',
      '现炒现做，高峰期可能延迟', 1, 1, '["川菜","热销"]'),
-    (10002, '稻香快餐', '', 4.7, 1860, 15.00, 3.00, 25, '800m',
+    (10002, '稻香快餐', '', 4.7, 1860, 15.00, 3.00, 20.00, 3.00, 25, '800m',
      '新客立减 5 元', 1, 1, '["快餐","新客优惠"]'),
-    (10003, '轻食研究所', '', 4.8, 920, 25.00, 6.00, 35, '2.4km',
+    (10003, '轻食研究所', '', 4.8, 920, 25.00, 6.00, 0.00, 0.00, 35, '2.4km',
      '正在准备菜单', 1, 0, '["轻食","健康"]'),
-    (10004, '夜宵炸物局', '', 4.6, 760, 18.00, 4.00, 40, '3.1km',
+    (10004, '夜宵炸物局', '', 4.6, 760, 18.00, 4.00, 40.00, 8.00, 40, '3.1km',
      '今日休息，暂停接单', 0, 1, '["夜宵","炸物"]');
+
+UPDATE shop SET full_amount = 30.00, reduce_amount = 5.00 WHERE id = 10001;
+UPDATE shop SET full_amount = 20.00, reduce_amount = 3.00 WHERE id = 10002;
+UPDATE shop SET full_amount = 0.00, reduce_amount = 0.00 WHERE id = 10003;
+UPDATE shop SET full_amount = 40.00, reduce_amount = 8.00 WHERE id = 10004;
 
 INSERT IGNORE INTO address (id, user_id, tag, name, phone, detail, is_default)
 VALUES

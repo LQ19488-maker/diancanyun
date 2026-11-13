@@ -79,6 +79,10 @@ USER_PREFIX  = '/user'    // 顾客端
 | P0 | `/rider/**` | 骑手接单工作台 | 任务、抢单、配送、送达、统计 |
 | P0 | `/user/shops`、`/user/shop/{id}` | 外卖店铺首页与详情 | 起送价、配送费、营业状态 |
 | P0 | `/user/addresses`、`/user/address/**` | 顾客收货地址 | 默认地址唯一 |
+| P0 | `POST /user/order`、`GET /user/order/{id}`、`GET /user/orders` | 顾客下单与我的订单 | 金额口径含满减；`payStatus` 默认 `PAID`（模拟支付） |
+| P1 | `/admin/dish/**`、`/admin/combo/**` | 菜品与套餐管理 | 按 `app.merchant-shop-id` 固定店铺过滤 |
+| P1 | `/admin/order/page`、`GET /admin/order/{id}`、`PUT /admin/order/{id}/status` | 商家订单管理 | 状态机 PENDING→ACCEPTED→DELIVERING→DONE / CANCELED |
+| P2 | `GET /admin/shop`、`PUT /admin/shop` | 商家端店铺设置与满减配置 | 见 3.7 节 |
 | P1 | GET /admin/category/page、POST/PUT /admin/category、DELETE /admin/category/{id} | 分类管理 | 被引用时返回业务错误码 + 中文 message |
 | P1 | GET/PUT /admin/flavor/{categoryId} | 口味配置（整体覆盖） | PUT 入参 { flavors:[{name, values:[{name}]}] } |
 | P2 | GET /admin/statistics/overview | 工作台指标卡与图表 | 见 2.3 节出参 |
@@ -88,6 +92,11 @@ USER_PREFIX  = '/user'    // 顾客端
 
 1. **主键 Long 已全局序列化为字符串**，避免 JavaScript 精度丢失。
 2. **错误码已统一**：401 表示未登录或过期，业务冲突使用 4001，资源不存在使用 4004，参数错误使用 1001。
+3. **时间统一为 `yyyy-MM-dd HH:mm:ss`**（`JacksonConfig` 里的三个序列化器，日期/时间各自格式）。
+4. **计数与分页是 JSON 数字**：`total`、`page`、`pageSize`、`dishCount`、`status-count` 各计数都按 int 输出，不再是字符串。
+5. **满减与金额口径已落地**：`totalAmount = amount - discount + packFee + deliveryFee`，减免额不会超过菜品小计。
+6. **测试**：`mvn test` 含 10 个真连 MySQL 的集成用例（登录/越权/分页/时间格式/满减/店铺设置/订单全流程），
+   本机没有 MySQL 时这 10 个自动跳过，不会把构建搞红；另有契约路由表校验与不依赖数据库的冒烟测试。
 
 ### 联调顺序
 
@@ -153,7 +162,7 @@ USER_PREFIX  = '/user'    // 顾客端
 |---|---|---|
 | 主键 `id` | **一律序列化成字符串** | MySQL 雪花 ID 是 19 位 Long，JS `Number` 只有 2^53 精度，直接返回数字会失真，查详情查不到 |
 | 时间 | `yyyy-MM-dd HH:mm:ss` 字符串 | 前端用 dayjs 解析；返回时间戳也能吃，但不要混用 |
-| 金额 | 建议以**分**为整数传输；若用元，请给 `DECIMAL` 的字符串或最多两位小数的数字 | 前端不做浮点加减 |
+| 金额 | 后端用「元」的两位小数 `DECIMAL`，序列化成 JSON 数字（如 `38.00`） | 前端只做展示与比较，不做浮点加减 |
 
 > 主键成字符串这一条请务必在 `WebMvcConfiguration` 里配 Jackson：
 > `SimpleModule` + `Long.class → ToStringSerializer`（全局生效，最省事）。
@@ -252,7 +261,7 @@ interface Rider {
 | 方法 | 路径 | 说明 |
 |---|---|---|
 | GET | `/admin/order/page` | 入参 `page,pageSize,orderNo?,status?,startTime?,endTime?,phone?` |
-| GET | `/admin/order/{id}` | 详情：菜品明细 + 状态时间轴 + 金额三段 |
+| GET | `/admin/order/{id}` | 详情：菜品明细 + 状态时间轴 + 金额五项 `amount / discount / packFee / deliveryFee / totalAmount` |
 | PUT | `/admin/order/{id}/status` | `{ status: 'ACCEPTED' \| 'DELIVERING' \| 'DONE' \| 'CANCELED' }` |
 
 **订单状态枚举**（前端 `constants/enums.js` 已按此实现状态机，请保持一致）：
@@ -271,7 +280,7 @@ interface Rider {
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| GET | `/user/shops` | 店铺列表，入参 `keyword?,page,pageSize`；返回 `{total,records}`，每条含 `rating,monthlySales,minPrice,deliveryFee,deliveryTime,distance,status,openMenu,tags` |
+| GET | `/user/shops` | 店铺列表，入参 `keyword?,page,pageSize`；返回 `{total,records}`，每条含 `rating,monthlySales,minPrice,deliveryFee,fullAmount,reduceAmount,deliveryTime,distance,status,openMenu,tags` |
 | GET | `/user/shop/{id}` | 店铺详情（菜单页头部用） |
 | GET | `/user/menu?shopId=` | 分类 + 在售菜品（含口味），**按店铺返回**；不传 shopId 时退回第一家店 |
 | GET | `/user/addresses` | 收货地址列表，按默认地址优先排序 |
@@ -287,7 +296,7 @@ interface Rider {
 
 | 字段 | 说明 |
 |---|---|
-| `shopName` / `deliveryFee` | 店铺名与配送费，金额口径：`totalAmount = amount + deliveryFee` |
+| `shopName` / `deliveryFee` / `packFee` / `discount` | 店铺名、配送费、打包费、满减金额。金额口径固定为：`totalAmount = amount - discount + packFee + deliveryFee`（先算菜品小计，再减满减，最后加打包费与配送费） |
 | `addressInfo` | `{ name, phone, detail, tag }` 下单时的地址快照，地址被改/删后历史订单不受影响 |
 | `riderName` / `riderPhone` | 骑手接单后回填，顾客端据此显示「骑手正在配送」与联系电话 |
 
@@ -300,7 +309,7 @@ interface Rider {
 
 | 表 / 字段 | 要求 |
 |---|---|
-| `shop` 表 | 店名、评分、月售、起送价、配送费、配送时长、距离、营业状态；`id` 用字符串下发 |
+| `shop` 表 | 店名、评分、月售、起送价、配送费、配送时长、距离、营业状态；`full_amount` / `reduce_amount` 存满减门槛与减免额（`0` 表示不做满减）；`id` 用字符串下发 |
 | `dish.shop_id`、`category.shop_id`、`combo.shop_id` | 必填外键，删除店铺时按业务决定禁止还是级联 |
 | `order.shop_id` | 下单落库时写入，顾客端与骑手端都靠它显示「店铺」 |
 | `/user/shops` | 列表带 `openMenu`（菜单是否已接入）；未接入的店前端显示「菜单接入中」 |
@@ -310,12 +319,40 @@ interface Rider {
 > 商家后台目前是「一家店」的视角，没有店铺切换器；要变成一家商家管多家店，
 > 需要先加「当前店铺」选择，所有后台请求带上 `shopId`，这块等后端字段定了再做。
 
+### 3.7 商家端店铺设置（后端已实现，前端待接入）
+
+商家后台是「一家店」视角，店铺由后端配置项 `app.merchant-shop-id` 固定
+（演示值是 `10001` 川味小馆，与 `/admin/dish`、`/admin/combo` 的过滤店铺一致），
+所以接口不带店铺 id，改的就是自己那家店。
+
+| 方法 | 路径 | 入参 | 出参 `data` |
+|---|---|---|---|
+| GET | `/admin/shop` | — | 店铺设置：`{ id, name, minPrice, deliveryFee, fullAmount, reduceAmount, status, openMenu, ... }` |
+| PUT | `/admin/shop` | 下列字段**全部可选**，不传或传 `null` 表示保持不变：`{ name, minPrice, deliveryFee, fullAmount, reduceAmount, status, openMenu }` | 更新后的店铺设置，字段同上 |
+
+**满减语义**：`fullAmount` 是门槛，`reduceAmount` 是减免额，`fullAmount = 0` 表示这家店不做满减。
+下单时后端命中条件为 `菜品小计 >= fullAmount`，减免额不会超过菜品小计（防止总价为负）。
+
+**校验失败（HTTP 400 + `code: 4001`）**：
+
+- 满减金额不能大于满减门槛
+- 门槛为 0 时不能设置优惠额
+- 起送价 / 配送费 / 满减金额不能为负
+- `status`、`openMenu` 只能是 `0` 或 `1`
+- `id` 传了但不是自己那家店 → 拒绝
+
 ---
 
 ## 四、已知差异（联调时逐条登记）
 
 | 日期 | 接口 | 后端实际 | 前端处理 | 谁改 |
 |---|---|---|---|---|
-| — | — | — | — | — |
+| 2026-11-13 | 全部 | 失败字段名是 `message`，本节写作 `msg` | 前端 `http.js` 已兼容 `body.message \|\| body.msg`，无需改动 | — |
+| 2026-11-13 | `/auth/login` | 密码错误返回 **HTTP 200 + `code: 2001`**（`AuthController` 内部 catch 掉异常）；而 `/admin/me` 缺 token 是真 401 | 前端已按 `code` 判成功，无影响；若要 HTTP 语义统一需后端改 | 后端待定 |
+| 2026-11-13 | 金额字段 | 用「元」的两位小数（`38.00`），不是分 | 前端只展示与比较，不做浮点加减 | — |
+| 2026-11-13 | 订单 / 店铺 DTO | 新增 `discount`、`fullAmount`、`reduceAmount`，`packFee` 存在但恒为 `0`（没有打包费规则） | 结算页显示「已减 ¥x」；`packFee = 0` 时可不展示 | 前端补 UI |
+| 2026-11-13 | `/admin/shop` | 新增接口，原 49 条契约里没有 | 需要新增「店铺设置」页面 | 前端待做 |
+| 2026-11-13 | `/auth/admin/login`、`/auth/user/login` | 旧的三入口仍在；其中 `/user/login` 错误密码返回 401 而不是 2001 | 前端只用单入口 `/auth/login`，不影响 | — |
+| 2026-11-13 | 时间格式 | 已是 `yyyy-MM-dd HH:mm:ss`（`JacksonConfig` 统一序列化） | iOS Safari 用 `new Date('2026-11-13 19:41:22')` 会 Invalid Date，需先 `replace(' ', 'T')` 或用 dayjs | 前端注意 |
 
 > 规则：**优先后端改**（他只有一个消费者）；后端确实不改的，前端在 adapter 里折中，并在此登记一行。

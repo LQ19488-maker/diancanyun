@@ -60,7 +60,8 @@ public class OrderService {
         }
         Map<String, Object> params = Map.of("shopId", resolvedShopId);
         Map<String, Object> shop = jdbc.queryForMap(
-                "SELECT id, name, delivery_fee, delivery_time, status, open_menu FROM shop WHERE id = :shopId",
+                "SELECT id, name, delivery_fee, full_amount, reduce_amount, delivery_time, status, open_menu "
+                        + "FROM shop WHERE id = :shopId",
                 params
         );
         if (((Number) shop.get("status")).intValue() != 1
@@ -114,7 +115,8 @@ public class OrderService {
             throw new BusinessException(1001, "订单里没有有效菜品");
         }
         Map<String, Object> shop = jdbc.queryForMap(
-                "SELECT id, name, min_price, delivery_fee, status, open_menu FROM shop WHERE id = :id",
+                "SELECT id, name, min_price, delivery_fee, full_amount, reduce_amount, status, open_menu "
+                        + "FROM shop WHERE id = :id",
                 Map.of("id", request.shopId())
         );
         if (((Number) shop.get("status")).intValue() != 1
@@ -180,7 +182,18 @@ public class OrderService {
             throw new BusinessException(4001, "未达到店铺起送价 ¥" + minPrice);
         }
         BigDecimal deliveryFee = (BigDecimal) shop.get("delivery_fee");
-        BigDecimal totalAmount = amount.add(deliveryFee).setScale(2, RoundingMode.HALF_UP);
+        BigDecimal packFee = BigDecimal.ZERO;
+        // 金额口径固定为：菜品小计 → 满减 → 打包费 → 配送费
+        BigDecimal fullAmount = (BigDecimal) shop.get("full_amount");
+        BigDecimal reduceAmount = (BigDecimal) shop.get("reduce_amount");
+        BigDecimal discount = BigDecimal.ZERO;
+        if (fullAmount != null && reduceAmount != null
+                && reduceAmount.signum() > 0
+                && amount.compareTo(fullAmount) >= 0) {
+            discount = reduceAmount.min(amount).setScale(2, RoundingMode.HALF_UP);
+        }
+        BigDecimal totalAmount = amount.subtract(discount).add(packFee).add(deliveryFee)
+                .setScale(2, RoundingMode.HALF_UP);
         LocalDateTime now = LocalDateTime.now();
         String orderNo = "DC" + now.format(DateTimeFormatter.ofPattern("yyMMddHHmmss"))
                 + String.format("%03d", ThreadLocalRandom.current().nextInt(1000));
@@ -188,10 +201,10 @@ public class OrderService {
         jdbc.update(
                 "INSERT INTO orders(order_no, user_name, phone, customer_id, shop_id, shop_name, "
                         + "address, address_name, address_phone, address_detail, address_tag, "
-                        + "amount, delivery_fee, pack_fee, total_amount, remark, pay_status, status, "
+                        + "amount, delivery_fee, pack_fee, discount, total_amount, remark, pay_status, status, "
                         + "created_at, updated_at) VALUES(:orderNo, :userName, :phone, :customerId, "
                         + ":shopId, :shopName, :address, :addressName, :addressPhone, :addressDetail, "
-                        + ":addressTag, :amount, :deliveryFee, 0, :totalAmount, :remark, 'PAID', "
+                        + ":addressTag, :amount, :deliveryFee, :packFee, :discount, :totalAmount, :remark, 'PAID', "
                         + "'PENDING', :createdAt, :createdAt)",
                 new MapSqlParameterSource()
                         .addValue("orderNo", orderNo)
@@ -207,6 +220,8 @@ public class OrderService {
                         .addValue("addressTag", address.get("tag"))
                         .addValue("amount", amount)
                         .addValue("deliveryFee", deliveryFee)
+                        .addValue("packFee", packFee)
+                        .addValue("discount", discount)
                         .addValue("totalAmount", totalAmount)
                         .addValue("remark", blankToEmpty(request.remark()))
                         .addValue("createdAt", now),
@@ -316,18 +331,18 @@ public class OrderService {
 
     public Map<String, Object> statusCount() {
         Map<String, Object> counts = new LinkedHashMap<>();
-        counts.put("ALL", 0L);
+        counts.put("ALL", 0);
         for (String status : List.of("PENDING", "ACCEPTED", "DELIVERING", "DONE", "CANCELED")) {
-            counts.put(status, 0L);
+            counts.put(status, 0);
         }
         jdbc.query(
                 "SELECT status, COUNT(*) AS amount FROM orders GROUP BY status",
                 Map.of(),
                 rs -> {
                     String status = rs.getString("status");
-                    long amount = rs.getLong("amount");
+                    int amount = rs.getInt("amount");
                     counts.put(status, amount);
-                    counts.put("ALL", ((Number) counts.get("ALL")).longValue() + amount);
+                    counts.put("ALL", ((Number) counts.get("ALL")).intValue() + amount);
                 }
         );
         return counts;
@@ -418,7 +433,7 @@ public class OrderService {
         List<Map<String, Object>> rows = jdbc.query(
                 "SELECT id, order_no, user_name, phone, customer_id, shop_id, shop_name, table_no, "
                         + "address, address_name, address_phone, address_detail, address_tag, "
-                        + "amount, delivery_fee, pack_fee, total_amount, remark, pay_status, status, "
+                        + "amount, delivery_fee, pack_fee, discount, total_amount, remark, pay_status, status, "
                         + "rider_id, rider_name, rider_phone, created_at FROM orders WHERE id = :id",
                 Map.of("id", id),
                 (rs, rowNum) -> {
@@ -441,6 +456,7 @@ public class OrderService {
                     row.put("amount", rs.getBigDecimal("amount"));
                     row.put("deliveryFee", rs.getBigDecimal("delivery_fee"));
                     row.put("packFee", rs.getBigDecimal("pack_fee"));
+                    row.put("discount", rs.getBigDecimal("discount"));
                     row.put("totalAmount", rs.getBigDecimal("total_amount"));
                     row.put("remark", rs.getString("remark"));
                     row.put("payStatus", rs.getString("pay_status"));
@@ -487,6 +503,8 @@ public class OrderService {
         result.put("id", row.get("id"));
         result.put("name", row.get("name"));
         result.put("deliveryFee", row.get("delivery_fee"));
+        result.put("fullAmount", row.get("full_amount"));
+        result.put("reduceAmount", row.get("reduce_amount"));
         result.put("deliveryTime", row.get("delivery_time"));
         return result;
     }

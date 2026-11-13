@@ -11,6 +11,7 @@ import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.ObjectMapper;
 
+import java.math.BigDecimal;
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
@@ -45,7 +46,7 @@ public class ShopService {
         params.addValue("limit", safeSize).addValue("offset", (safePage - 1) * safeSize);
         List<Map<String, Object>> records = jdbc.query(
                 "SELECT id, name, image, rating, monthly_sales, min_price, delivery_fee, "
-                        + "delivery_time, distance, notice, status, open_menu, tags_json "
+                        + "full_amount, reduce_amount, delivery_time, distance, notice, status, open_menu, tags_json "
                         + "FROM shop" + where + " ORDER BY status DESC, rating DESC, id "
                         + "LIMIT :limit OFFSET :offset",
                 params,
@@ -57,7 +58,7 @@ public class ShopService {
     public Map<String, Object> shop(Long id) {
         List<Map<String, Object>> rows = jdbc.query(
                 "SELECT id, name, image, rating, monthly_sales, min_price, delivery_fee, "
-                        + "delivery_time, distance, notice, status, open_menu, tags_json "
+                        + "full_amount, reduce_amount, delivery_time, distance, notice, status, open_menu, tags_json "
                         + "FROM shop WHERE id = :id",
                 Map.of("id", id),
                 (rs, rowNum) -> shopMap(rs)
@@ -66,6 +67,76 @@ public class ShopService {
             throw new BusinessException(4004, "店铺不存在");
         }
         return rows.getFirst();
+    }
+
+    @Transactional
+    public Map<String, Object> updateSettings(Long id, ShopRequest request) {
+        if (request == null) {
+            throw new BusinessException(1001, "请求不能为空");
+        }
+        if (request.id() != null && request.id() != id) {
+            throw new BusinessException(4001, "只能修改自己的店铺");
+        }
+        Map<String, Object> current = shop(id);
+        String name = hasText(request.name()) ? request.name().trim() : (String) current.get("name");
+        BigDecimal minPrice = request.minPrice() != null
+                ? request.minPrice() : (BigDecimal) current.get("minPrice");
+        BigDecimal deliveryFee = request.deliveryFee() != null
+                ? request.deliveryFee() : (BigDecimal) current.get("deliveryFee");
+        BigDecimal fullAmount = request.fullAmount() != null
+                ? request.fullAmount() : (BigDecimal) current.get("fullAmount");
+        BigDecimal reduceAmount = request.reduceAmount() != null
+                ? request.reduceAmount() : (BigDecimal) current.get("reduceAmount");
+        int status = request.status() != null
+                ? normalizeFlag(request.status(), "营业状态")
+                : ((Number) current.get("status")).intValue();
+        int openMenu = request.openMenu() != null
+                ? normalizeFlag(request.openMenu(), "菜单状态")
+                : (((Boolean) current.get("openMenu")) ? 1 : 0);
+
+        requireNonNegative(minPrice, "起送价");
+        requireNonNegative(deliveryFee, "配送费");
+        requireNonNegative(fullAmount, "满减门槛");
+        requireNonNegative(reduceAmount, "满减金额");
+        if (fullAmount.signum() == 0 && reduceAmount.signum() > 0) {
+            throw new BusinessException(4001, "设置了满减金额就必须填满减门槛");
+        }
+        if (reduceAmount.compareTo(fullAmount) > 0) {
+            throw new BusinessException(4001, "满减金额不能大于满减门槛");
+        }
+
+        jdbc.update(
+                "UPDATE shop SET name = :name, min_price = :minPrice, delivery_fee = :deliveryFee, "
+                        + "full_amount = :fullAmount, reduce_amount = :reduceAmount, status = :status, "
+                        + "open_menu = :openMenu, updated_at = CURRENT_TIMESTAMP WHERE id = :id",
+                new MapSqlParameterSource()
+                        .addValue("id", id)
+                        .addValue("name", name)
+                        .addValue("minPrice", minPrice)
+                        .addValue("deliveryFee", deliveryFee)
+                        .addValue("fullAmount", fullAmount)
+                        .addValue("reduceAmount", reduceAmount)
+                        .addValue("status", status)
+                        .addValue("openMenu", openMenu)
+        );
+        return shop(id);
+    }
+
+    private static void requireNonNegative(BigDecimal value, String label) {
+        if (value == null || value.signum() < 0) {
+            throw new BusinessException(1001, label + "不能为负数");
+        }
+    }
+
+    private static int normalizeFlag(Integer value, String label) {
+        if (value == null || (value != 0 && value != 1)) {
+            throw new BusinessException(1001, label + "只能是 0 或 1");
+        }
+        return value;
+    }
+
+    private static boolean hasText(String value) {
+        return value != null && !value.isBlank();
     }
 
     public List<Map<String, Object>> addresses(Long userId) {
@@ -212,6 +283,8 @@ public class ShopService {
         row.put("monthlySales", rs.getInt("monthly_sales"));
         row.put("minPrice", rs.getBigDecimal("min_price"));
         row.put("deliveryFee", rs.getBigDecimal("delivery_fee"));
+        row.put("fullAmount", rs.getBigDecimal("full_amount"));
+        row.put("reduceAmount", rs.getBigDecimal("reduce_amount"));
         row.put("deliveryTime", rs.getInt("delivery_time"));
         row.put("distance", rs.getString("distance"));
         row.put("notice", rs.getString("notice"));

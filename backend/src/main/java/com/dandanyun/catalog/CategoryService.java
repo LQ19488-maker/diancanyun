@@ -249,7 +249,7 @@ public class CategoryService {
         row.put("type", rs.getInt("type"));
         row.put("sort", rs.getInt("sort_no"));
         row.put("status", rs.getInt("status"));
-        row.put("dishCount", rs.getLong("dish_count"));
+        row.put("dishCount", rs.getInt("dish_count"));
         row.put("updateTime", toLocalDateTime(rs.getTimestamp("updated_at")));
         return row;
     }

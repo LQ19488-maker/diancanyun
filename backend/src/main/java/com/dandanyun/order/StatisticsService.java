@@ -38,9 +38,10 @@ public class StatisticsService {
                 params
         );
         BigDecimal turnover = decimal(totals.get("turnover"));
-        long orderCount = number(totals.get("order_count"));
+        long orderTotal = number(totals.get("order_count"));
         long doneCount = number(totals.get("done_count"));
         long allCount = number(totals.get("all_count"));
+        int orderCount = (int) orderTotal;
         BigDecimal avgPrice = orderCount == 0
                 ? BigDecimal.ZERO
                 : turnover.divide(BigDecimal.valueOf(orderCount), 2, RoundingMode.HALF_UP);
@@ -54,7 +55,7 @@ public class StatisticsService {
             Map<String, Object> row = new LinkedHashMap<>();
             row.put("date", date.toString());
             row.put("turnover", BigDecimal.ZERO);
-            row.put("orderCount", 0L);
+            row.put("orderCount", 0);
             trendByDate.put(date, row);
         }
         jdbc.query(
@@ -69,7 +70,7 @@ public class StatisticsService {
                     Map<String, Object> row = trendByDate.get(day);
                     if (row != null) {
                         row.put("turnover", rs.getBigDecimal("turnover"));
-                        row.put("orderCount", rs.getLong("order_count"));
+                        row.put("orderCount", rs.getInt("order_count"));
                     }
                 }
         );
@@ -81,7 +82,7 @@ public class StatisticsService {
                 (rs, rowNum) -> {
                     Map<String, Object> row = new LinkedHashMap<>();
                     row.put("status", rs.getString("status"));
-                    row.put("count", rs.getLong("amount"));
+                    row.put("count", rs.getInt("amount"));
                     return row;
                 }
         );
@@ -94,7 +95,7 @@ public class StatisticsService {
                 (rs, rowNum) -> {
                     Map<String, Object> row = new LinkedHashMap<>();
                     row.put("name", rs.getString("name"));
-                    row.put("count", rs.getLong("count"));
+                    row.put("count", rs.getInt("count"));
                     row.put("amount", rs.getBigDecimal("amount"));
                     return row;
                 }

@@ -194,16 +194,16 @@ public class RiderService {
 
     public Map<String, Object> stats(Long id) {
         Map<String, Object> rider = find(id);
-        long availableTasks = jdbc.queryForObject(
+        int availableTasks = jdbc.queryForObject(
                 "SELECT COUNT(*) FROM orders WHERE status = 'ACCEPTED' AND rider_id IS NULL",
                 Map.of(),
-                Long.class
+                Integer.class
         );
-        Long todayDone = jdbc.queryForObject(
+        Integer todayDone = jdbc.queryForObject(
                 "SELECT COUNT(*) FROM orders WHERE rider_id = :id AND status = 'DONE' "
                         + "AND DATE(updated_at) = CURRENT_DATE",
                 Map.of("id", id),
-                Long.class
+                Integer.class
         );
         java.math.BigDecimal income = jdbc.queryForObject(
                 "SELECT COALESCE(SUM(delivery_fee), 0) FROM orders "
@@ -222,20 +222,20 @@ public class RiderService {
         return stats;
     }
 
-    public long onTheWay(Long riderId) {
-        Long count = jdbc.queryForObject(
+    public int onTheWay(Long riderId) {
+        Integer count = jdbc.queryForObject(
                 "SELECT COUNT(*) FROM orders WHERE rider_id = :id AND status = 'DELIVERING'",
                 Map.of("id", riderId),
-                Long.class
+                Integer.class
         );
         return count == null ? 0 : count;
     }
 
-    public long doneCount(Long riderId) {
-        Long count = jdbc.queryForObject(
+    public int doneCount(Long riderId) {
+        Integer count = jdbc.queryForObject(
                 "SELECT COUNT(*) FROM orders WHERE rider_id = :id AND status = 'DONE'",
                 Map.of("id", riderId),
-                Long.class
+                Integer.class
         );
         return count == null ? 0 : count;
     }
