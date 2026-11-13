@@ -14,6 +14,7 @@ export function toModel(d = {}) {
     status: Number(d.status ?? 1) === 0 ? 0 : 1,
     online: Number(d.online ?? 0) === 1 ? 1 : 0,
     todayDone: Number(d.todayDone ?? 0),
+    doneCount: Number(d.doneCount ?? d.todayDone ?? 0),
     onTheWay: Number(d.onTheWay ?? 0),
     rating: Number(d.rating ?? 5),
     updateTime: d.updateTime ?? d.updateAt ?? null

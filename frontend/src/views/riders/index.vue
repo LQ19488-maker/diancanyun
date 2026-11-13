@@ -79,11 +79,11 @@
           />
         </template>
       </el-table-column>
-      <el-table-column label="今日 / 在途" width="110" align="center">
+      <el-table-column label="完成 / 在途" width="110" align="center">
         <template #default="{ row }">
-          <span class="num">{{ row.todayDone }}</span>
+          <span class="num">{{ row.doneCount ?? 0 }}</span>
           <span class="text-muted"> / </span>
-          <span class="num" :class="{ busy: row.onTheWay > 0 }">{{ row.onTheWay }}</span>
+          <span class="num" :class="{ busy: row.onTheWay > 0 }">{{ row.onTheWay ?? 0 }}</span>
         </template>
       </el-table-column>
       <el-table-column label="评分" width="90" align="center">

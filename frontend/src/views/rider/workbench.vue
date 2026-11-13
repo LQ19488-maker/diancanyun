@@ -11,7 +11,7 @@
         <div class="v num">{{ stats.onTheWay || 0 }}<span class="u">单</span></div>
       </div>
       <div class="card">
-        <div class="k">配送收入</div>
+        <div class="k">累计收入</div>
         <div class="v num">¥{{ Number(stats.income || 0).toFixed(2) }}</div>
       </div>
       <div class="card">
@@ -74,7 +74,8 @@ const riderStore = useRiderStore()
 const loading = ref(false)
 const list = ref([])
 const grabbingId = ref('')
-const stats = ref(riderStore.stats || {})
+/** 直接跟着 store 走：store 加载完卡片自动刷新，不用手动赋值 */
+const stats = computed(() => riderStore.stats || {})
 /** 休息中的骑手不能抢单：按钮置灰，点了也不会发请求 */
 const online = computed(() => Number(riderStore.profile?.online ?? 1) === 1)
 
@@ -91,7 +92,6 @@ async function load() {
   try {
     const d = await request({ url: riderUrl('/tasks'), method: 'get', params: { page: 1, pageSize: 20 } })
     list.value = (d?.records || []).map(orderToModel)
-    stats.value = riderStore.stats
   } catch (e) {
     ElMessage.error(e?.message || '订单加载失败')
   } finally {
@@ -104,7 +104,6 @@ async function onGrab(order) {
   try {
     await riderStore.grab(order.id)
     ElMessage.success('抢单成功，去「我的配送」查看')
-    stats.value = riderStore.stats
     await load()
   } catch (e) {
     ElMessage.error(e?.message || '抢单失败')

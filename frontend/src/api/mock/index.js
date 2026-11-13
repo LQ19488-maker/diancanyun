@@ -14,7 +14,7 @@ const ok = (data) => ({ code: 200, message: 'ok', data })
 const fail = (code, message) => ({ code, message, data: null })
 
 /** 数据结构变化时改版本号，旧的 localStorage 数据自动作废 */
-const STORE_KEY = 'dcy_mock_db_v7'
+const STORE_KEY = 'dcy_mock_db_v9'
 
 function seed() {
   const now = Date.now()
@@ -67,6 +67,7 @@ function seed() {
   ]
   const categories = rawCats.map(([name, type, sort, status, dishCount], i) => ({
     id: String(2001 + i),
+    shopId: '8001',
     name,
     type,
     sort,
@@ -127,6 +128,7 @@ function seed() {
   ]
   const dishes = rawDishes.map(([name, categoryId, price, flavors], i) => ({
     id: String(3001 + i),
+    shopId: '8001',
     name,
     categoryId: String(categoryId),
     price,
@@ -135,6 +137,50 @@ function seed() {
     status: i % 7 === 5 ? 0 : 1,
     flavors,
     updateTime: ago(i * 4 + 1)
+  }))
+
+  /* ---------------- 第二家店：外婆家·五道口店（8002），有自己的分类和菜品 ---------------- */
+  const rawCats2 = [
+    ['招牌菜', 1, 1, 1],
+    ['家常小炒', 1, 2, 1],
+    ['汤羹', 1, 3, 1],
+    ['主食', 1, 4, 1]
+  ]
+  const categories2 = rawCats2.map(([name, type, sort, status], i) => ({
+    id: String(2101 + i),
+    shopId: '8002',
+    name,
+    type,
+    sort,
+    status,
+    dishCount: 0,
+    updateTime: ago(i * 5 + 3)
+  }))
+
+  const rawDishes2 = [
+    ['外婆红烧肉', 2101, 62.0, [{ name: '份量', values: ['小份', '大份'] }], '招牌，慢炖两小时'],
+    ['龙井虾仁', 2101, 88.0, [], '现剥河虾仁，配新茶'],
+    ['西湖醋鱼', 2101, 78.0, [], '草鱼现杀，酸甜适口'],
+    ['东坡肉', 2101, 58.0, [{ name: '份量', values: ['一块', '两块'] }], '肥而不腻'],
+    ['手撕包菜', 2102, 26.0, [{ name: '辣度', values: ['不辣', '微辣', '中辣'] }], '锅气足，很下饭'],
+    ['干煸四季豆', 2102, 32.0, [{ name: '辣度', values: ['微辣', '中辣'] }], '干香不油'],
+    ['蒜蓉粉丝娃娃菜', 2102, 36.0, [], '蒜香浓郁'],
+    ['老鸭汤', 2103, 48.0, [], '砂锅慢煨，汤清味厚'],
+    ['西湖牛肉羹', 2103, 28.0, [], '勾芡顺滑，胡椒微辣'],
+    ['葱油拌面', 2104, 18.0, [{ name: '份量', values: ['小碗', '大碗'] }], '葱油现熬'],
+    ['片儿川', 2104, 26.0, [{ name: '份量', values: ['小碗', '大碗'] }], '雪菜笋片肉丝面']
+  ]
+  const dishes2 = rawDishes2.map(([name, categoryId, price, flavors, desc], i) => ({
+    id: String(3101 + i),
+    shopId: '8002',
+    name,
+    categoryId: String(categoryId),
+    price,
+    image: thumb(name.slice(0, 1), palette[(i + 2) % palette.length]),
+    description: desc,
+    status: 1,
+    flavors,
+    updateTime: ago(i * 3 + 2)
   }))
 
   /* ---------------- 套餐（引用菜品 id）---------------- */
@@ -148,6 +194,7 @@ function seed() {
   ]
   const combos = rawCombos.map(([name, categoryId, price, dishIds, status], i) => ({
     id: String(4001 + i),
+    shopId: '8001',
     name,
     categoryId: String(categoryId),
     price,
@@ -210,7 +257,11 @@ function seed() {
       timeline.push({ status: 'CANCELED', time: new Date(new Date(createdAt).getTime() + 4 * 3600000).toISOString() })
     }
     const needRider = status === 'DELIVERING' || status === 'DONE'
-    const riderRow = needRider ? riders[i % riders.length] : null
+    // 演示账号 rider / rider2 就是前两位骑手：在途单派给别人，
+    // 这样刚登录时「我的配送」是干净的（不会一进来就顶个红点），已完成的历史单照样留着
+    const riderRow = !needRider
+      ? null
+      : riders[status === 'DELIVERING' ? 2 + (i % Math.max(1, riders.length - 2)) : i % riders.length]
     orders.push({
       id: String(5001 + i),
       orderNo: 'DC' + String(now).slice(-6) + String(1001 + i),
@@ -240,7 +291,7 @@ function seed() {
   /* ---------------- 店铺（平台视角；当前只有第一家接入了完整菜单）---------------- */
   const rawShops = [
     ['点单云·中关村店', 4.9, 1286, 20, 3, 32, '1.2km', '新店开业，满 30 减 5', 1, true, ['川菜', '家常菜']],
-    ['外婆家·五道口店', 4.7, 2431, 25, 4, 38, '2.4km', '招牌红烧肉第二份半价', 1, false, ['家常菜', '江浙菜']],
+    ['外婆家·五道口店', 4.7, 2431, 25, 4, 38, '2.4km', '招牌红烧肉第二份半价', 1, true, ['家常菜', '江浙菜']],
     ['蜀香源·望京店', 4.6, 892, 20, 3, 41, '3.8km', '', 1, false, ['川菜', '火锅']],
     ['轻食沙拉·国贸店', 4.8, 1560, 30, 5, 28, '0.9km', '低卡轻食，配送快', 1, false, ['轻食', '健康餐']],
     ['老北京炸酱面·西二旗店', 4.4, 703, 15, 2, 45, '5.1km', '', 1, false, ['面食', '京菜']],
@@ -269,7 +320,14 @@ function seed() {
   ]
 
   return {
-    riders, categories, flavors, dishes, combos, orders, shops, addresses,
+    riders,
+    categories: [...categories, ...categories2],
+    flavors,
+    dishes: [...dishes, ...dishes2],
+    combos,
+    orders,
+    shops,
+    addresses,
     seqAddress: 9003,
     seqShop: 8007,
     seqRider: 1001 + riders.length,
@@ -375,6 +433,16 @@ const routes = [
       if (notEmpty(online)) rows = rows.filter((r) => Number(r.online) === Number(online))
       if (notEmpty(status)) rows = rows.filter((r) => Number(r.status) === Number(status))
       rows.sort((a, b) => (a.updateTime < b.updateTime ? 1 : -1))
+      // 「完成 / 在途」也从订单里数，和骑手端看到的一致，不再是写死的演示数字
+      const orders = db.orders || []
+      rows = rows.map((r) => {
+        const mine = orders.filter((o) => String(o.riderId) === String(r.id))
+        return {
+          ...r,
+          doneCount: mine.filter((o) => o.status === 'DONE').length,
+          onTheWay: mine.filter((o) => o.status === 'DELIVERING').length
+        }
+      })
       return ok(paginate(rows, params))
     }
   },
@@ -431,7 +499,11 @@ const routes = [
       const db = load()
       const row = db.riders.find((r) => String(r.id) === String(match[1]))
       if (!row) return fail(4004, '骑手不存在')
-      if (Number(row.onTheWay) > 0) return fail(4001, `该骑手还有 ${row.onTheWay} 单在途，无法删除`)
+      // 在途单数从订单里数，有在途单就不许删（和列表上显示的「在途」是同一个口径）
+      const onTheWay = (db.orders || []).filter(
+        (o) => String(o.riderId) === String(row.id) && o.status === 'DELIVERING'
+      ).length
+      if (onTheWay > 0) return fail(4001, `该骑手还有 ${onTheWay} 单在途，无法删除`)
       db.riders = db.riders.filter((r) => String(r.id) !== String(match[1]))
       save(db)
       return ok(true)
@@ -472,7 +544,9 @@ const routes = [
     url: /^\/admin\/category\/page$/, 
     handler: ({ params }) => {
       const db = load()
-      let rows = db.categories.slice()
+      // 商家后台只管自己那家店（演示账号 = 中关村店 8001）
+      const shopId = String((params || {}).shopId || '8001')
+      let rows = db.categories.filter((r) => String(r.shopId || '8001') === shopId)
       const { type, name, status } = params || {}
       if (notEmpty(type)) rows = rows.filter((r) => Number(r.type) === Number(type))
       if (name) rows = rows.filter((r) => (r.name || '').includes(name))
@@ -578,7 +652,11 @@ const routes = [
     handler: ({ params }) => {
       const db = load()
       const catName = (id) => (db.categories.find((c) => String(c.id) === String(id)) || {}).name || ''
-      let rows = (db.dishes || []).map((d) => ({ ...d, categoryName: catName(d.categoryId) }))
+      // 商家后台只管自己那家店（演示账号 = 中关村店 8001）
+      const shopId = String((params || {}).shopId || '8001')
+      let rows = (db.dishes || [])
+        .filter((d) => String(d.shopId || '8001') === shopId)
+        .map((d) => ({ ...d, categoryName: catName(d.categoryId) }))
       const { name, categoryId, status } = params || {}
       if (name) rows = rows.filter((r) => (r.name || '').includes(name))
       if (notEmpty(categoryId)) rows = rows.filter((r) => String(r.categoryId) === String(categoryId))
@@ -665,7 +743,11 @@ const routes = [
       const db = load()
       const catName = (id) => (db.categories.find((c) => String(c.id) === String(id)) || {}).name || ''
       const dishById = (id) => (db.dishes || []).find((d) => String(d.id) === String(id))
-      let rows = (db.combos || []).map((c) => {
+      // 商家后台只管自己那家店（演示账号 = 中关村店 8001）
+      const shopId = String((params || {}).shopId || '8001')
+      let rows = (db.combos || [])
+        .filter((c) => String(c.shopId || '8001') === shopId)
+        .map((c) => {
         const dishes = (c.dishIds || []).map(dishById).filter(Boolean)
         return {
           ...c,
@@ -814,7 +896,6 @@ const routes = [
       row.riderPhone = me.phone || ''
       row.status = 'DELIVERING'
       row.timeline = [...(row.timeline || []), { status: 'DELIVERING', time: new Date().toISOString() }]
-      me.onTheWay = Number(me.onTheWay || 0) + 1
       save(db)
       return ok(row)
     }
@@ -850,8 +931,6 @@ const routes = [
       if (row.status !== 'DELIVERING') return fail(4001, '该订单当前不是配送中')
       row.status = 'DONE'
       row.timeline = [...(row.timeline || []), { status: 'DONE', time: new Date().toISOString() }]
-      me.onTheWay = Math.max(0, Number(me.onTheWay || 0) - 1)
-      me.todayDone = Number(me.todayDone || 0) + 1
       save(db)
       return ok(row)
     }
@@ -867,11 +946,21 @@ const routes = [
       if (!me) return fail(4004, '骑手不存在')
       const mine = (db.orders || []).filter((o) => String(o.riderId) === String(me.id))
       const done = mine.filter((o) => o.status === 'DONE')
+      // 在途单 / 今日完成都从订单里数，不读骑手表上的缓存值，
+      // 否则没接过单也会显示数字（底部「我的配送」的红点就是这么来的）
+      const onTheWay = mine.filter((o) => o.status === 'DELIVERING').length
+      const todayKey = new Date().toISOString().slice(0, 10)
+      // 「今日完成」按送达时间算：订单可能是前几天下的，今天刚送完也算今天的活儿
+      const doneTimeOf = (o) => {
+        const hit = (o.timeline || []).filter((x) => x.status === 'DONE').pop()
+        return String(hit?.time || o.createdAt || '').slice(0, 10)
+      }
+      const todayDone = done.filter((o) => doneTimeOf(o) === todayKey).length
       const income = Number((done.length * 5).toFixed(2))
       return ok({
         online: Number(me.online),
-        todayDone: Number(me.todayDone || 0),
-        onTheWay: Number(me.onTheWay || 0),
+        todayDone,
+        onTheWay,
         rating: Number(me.rating || 5),
         totalDone: done.length,
         income,
@@ -998,9 +1087,13 @@ const routes = [
   {
     method: 'get',
     url: /^\/user\/menu$/,
-    handler: () => {
+    handler: ({ params }) => {
       const db = load()
-      const cats = (db.categories || []).filter((c) => Number(c.type) === 1 && Number(c.status) === 1)
+      // 每道菜、每个分类都带 shopId：不传店铺时退回第一家店，保证老链接仍能用
+      const shopId = String((params || {}).shopId || (db.shops?.[0]?.id ?? '8001'))
+      const cats = (db.categories || []).filter(
+        (c) => Number(c.type) === 1 && Number(c.status) === 1 && String(c.shopId || '8001') === shopId
+      )
       const catIds = new Set(cats.map((c) => String(c.id)))
       const dishes = (db.dishes || [])
         .filter((d) => Number(d.status) === 1 && catIds.has(String(d.categoryId)))
