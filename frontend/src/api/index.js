@@ -12,10 +12,11 @@ import dish from './adapters/dish'
 import combo from './adapters/combo'
 import order from './adapters/order'
 import h5 from './adapters/h5'
+import shop from './adapters/shop'
 import upload from './adapters/upload'
 import statistics from './adapters/statistics'
 
-const api = { auth, rider, category, dish, combo, order, h5, upload, statistics }
+const api = { auth, rider, category, dish, combo, order, h5, shop, upload, statistics }
 
 export default api
 export { IS_MOCK, resolveFileUrl } from './http'

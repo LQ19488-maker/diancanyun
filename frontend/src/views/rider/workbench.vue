@@ -35,16 +35,22 @@
       <div v-for="o in list" :key="o.id" class="task">
         <div class="task-head">
           <span class="no">#{{ o.orderNo.slice(-6) }}</span>
-          <span class="dist">{{ o.tableNo || '外卖配送' }}</span>
+          <span class="dist">{{ o.shopName || '外卖配送' }}</span>
         </div>
         <div class="addr">📍 {{ o.address || '—' }}</div>
         <div class="items">{{ summary(o) }}</div>
         <div class="task-foot">
           <div class="money">
-            <span class="fee">配送费 ¥5.00</span>
+            <span class="fee">配送费 ¥{{ o.deliveryFee.toFixed(2) }}</span>
             <span class="text-muted">　{{ timeAgo(o.createdAt) }}</span>
           </div>
-          <el-button type="primary" size="small" :loading="grabbingId === o.id" @click="onGrab(o)">
+          <el-button
+            type="primary"
+            size="small"
+            :loading="grabbingId === o.id"
+            :disabled="!online"
+            @click="onGrab(o)"
+          >
             抢单
           </el-button>
         </div>
@@ -54,7 +60,7 @@
 </template>
 
 <script setup>
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { request } from '@/api/http'
@@ -69,6 +75,8 @@ const loading = ref(false)
 const list = ref([])
 const grabbingId = ref('')
 const stats = ref(riderStore.stats || {})
+/** 休息中的骑手不能抢单：按钮置灰，点了也不会发请求 */
+const online = computed(() => Number(riderStore.profile?.online ?? 1) === 1)
 
 function timeAgo(iso) {
   const diff = Date.now() - new Date(iso).getTime()

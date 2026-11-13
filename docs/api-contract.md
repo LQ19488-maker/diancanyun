@@ -257,14 +257,33 @@ interface Employee {
 | `DONE` | 已完成 | — |
 | `CANCELED` | 已取消 | — |
 
-### 3.5 用户端（H5，可选）
+### 3.5 顾客端（外卖 H5）
+
+前端路径前缀 `/user`（`src/api/urls.js` 的 `userUrl()`），下表按「路径后半段」列出。
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| GET | `/api/h5/menu?tableNo=` | 分类 + 菜品（含口味）/ 套餐 |
-| POST | `/api/h5/order` | `{ tableNo, items:[{ dishId, flavorValueIds[], quantity }], remark }` |
-| GET | `/api/h5/order/{id}` | 订单详情与状态 |
-| GET | `/api/address/list`、POST `/api/address` | 收货地址 |
+| GET | `/user/shops` | 店铺列表，入参 `keyword?,page,pageSize`；返回 `{total,records}`，每条含 `rating,monthlySales,minPrice,deliveryFee,deliveryTime,distance,status,openMenu,tags` |
+| GET | `/user/shop/{id}` | 店铺详情（菜单页头部用） |
+| GET | `/user/menu?shopId=` | 分类 + 在售菜品（含口味） |
+| GET | `/user/addresses` | 收货地址列表，按默认地址优先排序 |
+| POST | `/user/address` | 新增：`{ tag,name,phone,detail,isDefault }` |
+| PUT | `/user/address` | 编辑：`{ id, tag?,name?,phone?,detail? }` |
+| PUT | `/user/address/{id}/default` | 设为默认地址 |
+| DELETE | `/user/address/{id}` | 删除地址 |
+| POST | `/user/order` | 下单：`{ shopId,addressId,remark,items:[{dishId,quantity,flavors:[{name,value}]}] }` |
+| GET | `/user/order/{id}` | 订单详情：状态时间轴 + 骑手信息 + 收货信息 |
+| GET | `/user/orders` | 我的订单（只返回当前登录顾客自己的单） |
+
+**下单时后端要回填的字段**（顾客端结果页直接展示，缺了会显示成空）：
+
+| 字段 | 说明 |
+|---|---|
+| `shopName` / `deliveryFee` | 店铺名与配送费，金额口径：`totalAmount = amount + deliveryFee` |
+| `addressInfo` | `{ name, phone, detail, tag }` 下单时的地址快照，地址被改/删后历史订单不受影响 |
+| `riderName` / `riderPhone` | 骑手接单后回填，顾客端据此显示「骑手正在配送」与联系电话 |
+
+> 未达起送价由后端再校验一次（返回 4001 + 提示文案），前端按钮也已提前置灰。
 
 ---
 

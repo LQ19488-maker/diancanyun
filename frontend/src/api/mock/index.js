@@ -14,7 +14,7 @@ const ok = (data) => ({ code: 200, message: 'ok', data })
 const fail = (code, message) => ({ code, message, data: null })
 
 /** 数据结构变化时改版本号，旧的 localStorage 数据自动作废 */
-const STORE_KEY = 'dcy_mock_db_v5'
+const STORE_KEY = 'dcy_mock_db_v6'
 
 function seed() {
   const now = Date.now()
@@ -161,14 +161,14 @@ function seed() {
   /* ---------------- 订单 ---------------- */
   const ORDER_FLOW = ['PENDING', 'ACCEPTED', 'DELIVERING', 'DONE']
   const CUSTOMERS = [
-    ['王小明', '13800001111', '3 号桌'],
-    ['李静', '13900002222', '7 号桌'],
-    ['张伟', '13700003333', '打包带走'],
-    ['刘敏', '13600004444', '1 号桌'],
-    ['陈晨', '13500005555', '12 号桌'],
-    ['赵磊', '13400006666', '打包带走'],
-    ['孙悦', '13300007777', '5 号桌'],
-    ['周涛', '13200008888', '9 号桌']
+    ['王小明', '13800001111', '北京市海淀区中关村大街 1 号 A 座 1201'],
+    ['李静', '13900002222', '北京市海淀区知春路 6 号院 3 号楼 502'],
+    ['张伟', '13700003333', '北京市海淀区五道口华清嘉园 12 楼 3 单元 502'],
+    ['刘敏', '13600004444', '北京市海淀区科学院南路 8 号 2 号楼 1806'],
+    ['陈晨', '13500005555', '北京市海淀区苏州街 20 号 B 座 907'],
+    ['赵磊', '13400006666', '北京市海淀区丹棱街 3 号 1 号楼 601'],
+    ['孙悦', '13300007777', '北京市海淀区上地十街 1 号院 5 号楼 1102'],
+    ['周涛', '13200008888', '北京市海淀区西二旗大街 10 号院 6 号楼 803']
   ]
   const pickDishes = (seed) => {
     const n = 1 + (seed % 3)
@@ -189,12 +189,13 @@ function seed() {
   }
   const orders = []
   for (let i = 0; i < 28; i++) {
-    const [userName, phone, tableNo] = CUSTOMERS[i % CUSTOMERS.length]
+    const [userName, phone, addrDetail] = CUSTOMERS[i % CUSTOMERS.length]
     const items = pickDishes(i + 1)
     const amount = Number(items.reduce((t, x) => t + x.amount, 0).toFixed(2))
-    const packFee = tableNo === '打包带走' ? 2 : 0
+    const deliveryFee = i % 2 === 0 ? 3 : 2
     // 前 20 条铺满各状态，后面几条集中在待接单，方便演示
-    const status = i < 20 ? ORDER_FLOW[i % 4] : i % 5 === 0 ? 'CANCELED' : 'PENDING'
+    // 加一个 floor(i/8) 偏移，让同一个顾客的连续几单落在不同状态上
+    const status = i < 20 ? ORDER_FLOW[(i + Math.floor(i / 8)) % 4] : i % 5 === 0 ? 'CANCELED' : 'PENDING'
     // 摊到近 30 天，趋势图才有内容
     const createdAt = new Date(now - (i * 0.85 * 86400 + 1800) * 1000).toISOString()
     const idx = ORDER_FLOW.indexOf(status)
@@ -215,14 +216,19 @@ function seed() {
       orderNo: 'DC' + String(now).slice(-6) + String(1001 + i),
       riderId: riderRow ? String(riderRow.id) : '',
       riderName: riderRow ? riderRow.name : '',
+      riderPhone: riderRow ? riderRow.phone : '',
+      shopId: '8001',
+      shopName: '点单云·中关村店',
       userName,
       phone,
-      tableNo,
-      address: tableNo === '打包带走' ? '北京市海淀区中关村大街 1 号 A 座 1201' : '',
+      tableNo: '外卖配送',
+      address: addrDetail,
+      addressInfo: { name: userName, phone, detail: addrDetail, tag: i % 2 === 0 ? '公司' : '家' },
       items,
       amount,
-      packFee,
-      totalAmount: Number((amount + packFee).toFixed(2)),
+      packFee: 0,
+      deliveryFee,
+      totalAmount: Number((amount + deliveryFee).toFixed(2)),
       remark: i % 5 === 0 ? '不要香菜，少放辣' : '',
       payStatus: i % 4 === 3 ? 'UNPAID' : 'PAID',
       status,
@@ -231,8 +237,41 @@ function seed() {
     })
   }
 
+  /* ---------------- 店铺（平台视角；当前只有第一家接入了完整菜单）---------------- */
+  const rawShops = [
+    ['点单云·中关村店', 4.9, 1286, 20, 3, 32, '1.2km', '新店开业，满 30 减 5', 1, true, ['川菜', '家常菜']],
+    ['外婆家·五道口店', 4.7, 2431, 25, 4, 38, '2.4km', '招牌红烧肉第二份半价', 1, false, ['家常菜', '江浙菜']],
+    ['蜀香源·望京店', 4.6, 892, 20, 3, 41, '3.8km', '', 1, false, ['川菜', '火锅']],
+    ['轻食沙拉·国贸店', 4.8, 1560, 30, 5, 28, '0.9km', '低卡轻食，配送快', 1, false, ['轻食', '健康餐']],
+    ['老北京炸酱面·西二旗店', 4.4, 703, 15, 2, 45, '5.1km', '', 1, false, ['面食', '京菜']],
+    ['深夜食堂·中关村店', 4.9, 3210, 25, 4, 35, '1.6km', '夜宵满 50 减 10', 0, false, ['夜宵', '烧烤']]
+  ]
+  const shops = rawShops.map(([name, rating, monthlySales, minPrice, deliveryFee, deliveryTime, distance, notice, status, openMenu, tags], i) => ({
+    id: String(8001 + i),
+    name,
+    image: thumb('店', palette[i % palette.length]),
+    rating,
+    monthlySales,
+    minPrice,
+    deliveryFee,
+    deliveryTime,
+    distance,
+    notice,
+    status,
+    openMenu: Boolean(openMenu),
+    tags
+  }))
+
+  /* ---------------- 收货地址（演示固定属于顾客 customer）---------------- */
+  const addresses = [
+    { id: '9001', userId: '9002', tag: '公司', name: '王小明', phone: '13800001111', detail: '北京市海淀区中关村大街 1 号 A 座 1201', isDefault: 1 },
+    { id: '9002', userId: '9002', tag: '家', name: '王小明', phone: '13800001111', detail: '北京市海淀区五道口华清嘉园 12 楼 3 单元 502', isDefault: 0 }
+  ]
+
   return {
-    riders, categories, flavors, dishes, combos, orders,
+    riders, categories, flavors, dishes, combos, orders, shops, addresses,
+    seqAddress: 9003,
+    seqShop: 8007,
     seqRider: 1001 + riders.length,
     seqCat: 2001 + categories.length,
     seqDish: 3001 + dishes.length,
@@ -772,6 +811,7 @@ const routes = [
       if (row.status !== 'ACCEPTED') return fail(4001, '该订单当前不可接单')
       row.riderId = String(me.id)
       row.riderName = me.name
+      row.riderPhone = me.phone || ''
       row.status = 'DELIVERING'
       row.timeline = [...(row.timeline || []), { status: 'DELIVERING', time: new Date().toISOString() }]
       me.onTheWay = Number(me.onTheWay || 0) + 1
@@ -858,6 +898,105 @@ const routes = [
   /* ---------------- 用户端（H5，前缀 /user）---------------- */
   {
     method: 'get',
+    url: /^\/user\/shops$/,
+    handler: ({ params }) => {
+      const db = load()
+      let rows = (db.shops || []).slice()
+      const kw = (params || {}).keyword
+      if (kw) {
+        rows = rows.filter(
+          (r) => r.name.includes(kw) || (r.tags || []).some((t) => t.includes(kw))
+        )
+      }
+      rows.sort((a, b) => Number(b.status) - Number(a.status) || b.rating - a.rating)
+      return ok(paginate(rows, params))
+    }
+  },
+  {
+    method: 'get',
+    url: /^\/user\/shop\/(\w+)$/,
+    handler: ({ match }) => {
+      const db = load()
+      const row = (db.shops || []).find((x) => String(x.id) === String(match[1]))
+      return row ? ok(row) : fail(4004, '店铺不存在')
+    }
+  },
+  {
+    method: 'get',
+    url: /^\/user\/addresses$/,
+    handler: () => {
+      const db = load()
+      const rows = (db.addresses || [])
+        .slice()
+        .sort((a, b) => Number(b.isDefault) - Number(a.isDefault) || (a.id < b.id ? 1 : -1))
+      return ok({ total: rows.length, records: rows })
+    }
+  },
+  {
+    method: 'post',
+    url: /^\/user\/address$/,
+    handler: ({ data }) => {
+      const db = load()
+      if (!data || !data.detail) return fail(1001, '请填写详细地址')
+      const row = {
+        id: String(db.seqAddress++),
+        userId: '9002',
+        tag: data.tag || '其他',
+        name: data.name || '',
+        phone: data.phone || '',
+        detail: data.detail,
+        isDefault: Number(data.isDefault) === 1 ? 1 : 0
+      }
+      if (row.isDefault) (db.addresses || []).forEach((a) => (a.isDefault = 0))
+      db.addresses = [...(db.addresses || []), row]
+      save(db)
+      return ok(row)
+    }
+  },
+  {
+    method: 'put',
+    url: /^\/user\/address$/,
+    handler: ({ data }) => {
+      const db = load()
+      const row = (db.addresses || []).find((a) => String(a.id) === String(data.id))
+      if (!row) return fail(4004, '地址不存在')
+      Object.assign(row, {
+        tag: data.tag ?? row.tag,
+        name: data.name ?? row.name,
+        phone: data.phone ?? row.phone,
+        detail: data.detail ?? row.detail
+      })
+      save(db)
+      return ok(row)
+    }
+  },
+  {
+    method: 'put',
+    url: /^\/user\/address\/(\w+)\/default$/,
+    handler: ({ match }) => {
+      const db = load()
+      const row = (db.addresses || []).find((a) => String(a.id) === String(match[1]))
+      if (!row) return fail(4004, '地址不存在')
+      ;(db.addresses || []).forEach((a) => (a.isDefault = String(a.id) === String(match[1]) ? 1 : 0))
+      save(db)
+      return ok(row)
+    }
+  },
+  {
+    method: 'delete',
+    url: /^\/user\/address\/(\w+)$/,
+    handler: ({ match }) => {
+      const db = load()
+      const before = (db.addresses || []).length
+      db.addresses = (db.addresses || []).filter((a) => String(a.id) !== String(match[1]))
+      save(db)
+      return before === db.addresses.length ? fail(4004, '地址不存在') : ok(true)
+    }
+  },
+
+  /* ---------------- 用户端：菜单与订单 ---------------- */
+  {
+    method: 'get',
     url: /^\/user\/menu$/,
     handler: () => {
       const db = load()
@@ -900,30 +1039,42 @@ const routes = [
             quantity: qty,
             unitPrice: Number(dish.price),
             amount: Number((dish.price * qty).toFixed(2)),
-            flavors: (it.flavors || [])
-              .map((f) => (f && f.name ? `${f.name}:${f.value}` : ''))
-              .filter(Boolean)
+            flavors: (it.flavors || []).map((f) => (f && f.name ? `${f.name}:${f.value}` : '')).filter(Boolean)
           }
         })
         .filter(Boolean)
 
       if (!items.length) return fail(1001, '订单里没有有效菜品')
 
+      const addr = (db.addresses || []).find((a) => String(a.id) === String(body.addressId))
+      if (!addr) return fail(1001, '请先选择收货地址')
+
+      const shop = (db.shops || []).find((x) => String(x.id) === String(body.shopId)) || {}
       const amount = Number(items.reduce((t, x) => t + x.amount, 0).toFixed(2))
-      const tableNo = (body.tableNo || '3 号桌').trim()
-      const packFee = tableNo.includes('打包') ? 2 : 0
+      const deliveryFee = Number(shop.deliveryFee || 0)
+      if (shop.minPrice && amount < Number(shop.minPrice)) {
+        return fail(4001, `未达起送价 ¥${shop.minPrice}，还差 ¥${(Number(shop.minPrice) - amount).toFixed(2)}`)
+      }
+
       const nowIso = new Date().toISOString()
       const row = {
-        id: String(db.seqOrder || (5001 + (db.orders || []).length)),
+        id: String(db.seqOrder || 5001 + (db.orders || []).length),
         orderNo: 'DC' + String(Date.now()).slice(-6) + String((db.orders || []).length + 1001),
-        userName: '顾客',
-        phone: '13800000000',
-        tableNo,
-        address: '',
+        riderId: '',
+        riderName: '',
+        riderPhone: '',
+        shopId: String(shop.id || ''),
+        shopName: shop.name || '',
+        userName: addr.name,
+        phone: addr.phone,
+        tableNo: '外卖配送',
+        address: addr.detail,
+        addressInfo: { name: addr.name, phone: addr.phone, detail: addr.detail, tag: addr.tag },
         items,
         amount,
-        packFee,
-        totalAmount: Number((amount + packFee).toFixed(2)),
+        packFee: 0,
+        deliveryFee,
+        totalAmount: Number((amount + deliveryFee).toFixed(2)),
         remark: body.remark || '',
         payStatus: 'UNPAID',
         status: 'PENDING',
@@ -950,7 +1101,11 @@ const routes = [
     url: /^\/user\/orders$/,
     handler: ({ params }) => {
       const db = load()
-      const rows = (db.orders || []).slice().sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
+      /* 演示环境只有一个顾客账号（王小明），这里按收件人过滤，保证「我的订单」只出现自己的单 */
+      const mine = (db.orders || []).filter(
+        (o) => o.userName === '王小明' || o.phone === '13800001111' || o.addressInfo?.name === '王小明'
+      )
+      const rows = mine.slice().sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
       return ok(paginate(rows, params))
     }
   },

@@ -12,7 +12,7 @@ export const DEMO_ACCOUNTS = [
   { role: '商家', username: 'merchant', password: 'merchant1234', name: '刘添祺', home: '/dashboard' },
   { role: '骑手', username: 'rider', password: 'rider1234', name: '胡粤毫', home: '/rider/workbench' },
   { role: '骑手', username: 'rider2', password: 'rider21234', name: '桂誉', home: '/rider/workbench' },
-  { role: '顾客', username: 'customer', password: 'customer1234', name: '顾客小王', home: '/h5/shop' }
+  { role: '顾客', username: 'customer', password: 'customer1234', name: '王小明', home: '/h5/shop' }
 ]
 
 /** 用户名 → 角色 key（mock 与前端共用） */

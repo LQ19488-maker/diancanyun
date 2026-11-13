@@ -26,7 +26,7 @@ export const ROLE_LABEL = {
 export const ROLE_HOME = {
   [ROLE.MERCHANT]: '/dashboard',
   [ROLE.RIDER]: '/rider/workbench',
-  [ROLE.CUSTOMER]: '/h5/menu'
+  [ROLE.CUSTOMER]: '/h5/shop'
 }
 
 /** 通用启用/停用（分类、账号等共用） */

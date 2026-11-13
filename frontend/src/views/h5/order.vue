@@ -6,7 +6,7 @@
 
     <div v-else-if="!order" class="pad">
       <el-empty description="订单不存在" :image-size="70">
-        <el-button type="primary" @click="router.replace('/h5/menu')">回菜单</el-button>
+        <el-button type="primary" @click="router.replace('/h5/shop')">回店铺</el-button>
       </el-empty>
     </div>
 
@@ -19,8 +19,44 @@
           <div class="time">{{ formatDateTime(order.createdAt, 'MM-DD HH:mm') }} 下单</div>
         </div>
 
+        <!-- 骑手：接单后出现；派送中给电话，方便联系 -->
+        <div v-if="order.riderName" class="card rider">
+          <div class="avatar">🛵</div>
+          <div class="r-info">
+            <div class="r-name">{{ order.riderName }}</div>
+            <div class="r-sub">{{ order.status === 'DELIVERING' ? '正在为您配送' : '负责本单配送' }}</div>
+          </div>
+          <a v-if="order.riderPhone" class="call" :href="`tel:${order.riderPhone}`">
+            📞 {{ order.riderPhone }}
+          </a>
+        </div>
+        <div v-else-if="order.status === 'PENDING'" class="card rider idle">
+          <div class="avatar">⏳</div>
+          <div class="r-info">
+            <div class="r-name">等待骑手接单</div>
+            <div class="r-sub">商家接单后会自动派给附近骑手</div>
+          </div>
+        </div>
+
+        <!-- 收货信息 -->
         <div class="card">
-          <div class="section-title">状态</div>
+          <div class="section-title">配送信息</div>
+          <div class="info-row">
+            <span class="k">收货人</span>
+            <span class="v">{{ order.addressInfo.name }}　{{ order.addressInfo.phone }}</span>
+          </div>
+          <div class="info-row">
+            <span class="k">地址</span>
+            <span class="v">{{ order.addressInfo.detail }}</span>
+          </div>
+          <div v-if="order.shopName" class="info-row">
+            <span class="k">店铺</span>
+            <span class="v">{{ order.shopName }}</span>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="section-title">配送进度</div>
           <el-timeline class="mini-timeline">
             <el-timeline-item
               v-for="(t, i) in order.timeline"
@@ -41,6 +77,14 @@
             <span class="q num">×{{ it.quantity }}</span>
             <span class="a num">¥{{ it.amount.toFixed(2) }}</span>
           </div>
+          <div class="line sub">
+            <span>菜品小计</span>
+            <span class="num">¥{{ order.amount.toFixed(2) }}</span>
+          </div>
+          <div class="line sub">
+            <span>配送费</span>
+            <span class="num">¥{{ order.deliveryFee.toFixed(2) }}</span>
+          </div>
           <div class="line total">
             <span>合计</span>
             <span class="num">¥{{ order.totalAmount.toFixed(2) }}</span>
@@ -58,7 +102,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import api from '@/api'
@@ -76,8 +120,8 @@ const order = ref(null)
 const HERO = {
   PENDING: { icon: '⏳', title: '下单成功，等待商家接单', cls: 'pending' },
   ACCEPTED: { icon: '👨‍🍳', title: '商家已接单，正在备餐', cls: 'accepted' },
-  DELIVERING: { icon: '🛵', title: '正在派送，请稍候', cls: 'delivering' },
-  DONE: { icon: '✅', title: '订单已完成，欢迎下次光临', cls: 'done' },
+  DELIVERING: { icon: '🛵', title: '骑手正在配送，请保持手机畅通', cls: 'delivering' },
+  DONE: { icon: '✅', title: '已送达，欢迎下次光临', cls: 'done' },
   CANCELED: { icon: '❌', title: '订单已取消', cls: 'canceled' }
 }
 
@@ -122,6 +166,38 @@ function onAgain() {
 
 watch(() => route.params.id, load, { immediate: true })
 onMounted(load)
+
+/**
+ * 订单还在流转中时每 15 秒静默拉一次，
+ * 商家接单 / 骑手抢单后顾客不用手动刷新就能看到进度变化。
+ */
+const POLL_MS = 15000
+let timer = null
+
+function stopPoll() {
+  if (timer) {
+    clearInterval(timer)
+    timer = null
+  }
+}
+
+function startPoll() {
+  stopPoll()
+  timer = setInterval(async () => {
+    if (!order.value || ['DONE', 'CANCELED'].includes(order.value.status)) {
+      stopPoll()
+      return
+    }
+    try {
+      order.value = await api.h5.order(route.params.id)
+    } catch {
+      /* 轮询失败不打扰用户，下一次再试 */
+    }
+  }, POLL_MS)
+}
+
+onMounted(startPoll)
+onBeforeUnmount(stopPoll)
 </script>
 
 <style scoped>
@@ -162,10 +238,75 @@ onMounted(load)
   margin-bottom: 12px;
 }
 
+.rider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: #eef4fc;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  flex: none;
+}
+
+.r-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.r-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1f2d3d;
+}
+
+.r-sub {
+  margin-top: 2px;
+  font-size: 11px;
+  color: #9aa3b2;
+}
+
+.call {
+  font-size: 12px;
+  color: #1a4d8f;
+  text-decoration: none;
+  border: 1px solid #dbe6f5;
+  border-radius: 14px;
+  padding: 4px 10px;
+  white-space: nowrap;
+}
+
 .section-title {
   font-size: 13px;
   color: #6b7280;
   margin-bottom: 8px;
+}
+
+.info-row {
+  display: flex;
+  gap: 10px;
+  padding: 4px 0;
+  font-size: 13px;
+}
+
+.info-row .k {
+  flex: none;
+  width: 48px;
+  color: #9aa3b2;
+}
+
+.info-row .v {
+  flex: 1;
+  min-width: 0;
+  color: #1f2d3d;
+  line-height: 1.5;
 }
 
 .mini-timeline {
@@ -180,6 +321,12 @@ onMounted(load)
   padding: 7px 0;
   border-bottom: 1px solid #f5f7fa;
   font-size: 13px;
+}
+
+.line.sub {
+  border: none;
+  padding: 3px 0;
+  color: #6b7280;
 }
 
 .n {

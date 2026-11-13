@@ -94,14 +94,16 @@ const routes = [
   {
     path: '/h5',
     component: () => import('@/layouts/H5Layout.vue'),
-    redirect: '/h5/menu',
+    redirect: '/h5/shop',
     meta: { public: true },
     children: [
+      { path: 'shop', name: 'h5-shop', component: () => import('@/views/h5/shop.vue'), meta: { title: '选店铺', public: true } },
       { path: 'menu', name: 'h5-menu', component: () => import('@/views/h5/menu.vue'), meta: { title: '点餐', public: true } },
+      { path: 'address', name: 'h5-address', component: () => import('@/views/h5/address.vue'), meta: { title: '收货地址', public: true } },
       { path: 'cart', name: 'h5-cart', component: () => import('@/views/h5/cart.vue'), meta: { title: '购物车', public: true } },
       { path: 'confirm', name: 'h5-confirm', component: () => import('@/views/h5/confirm.vue'), meta: { title: '确认订单', public: true } },
       { path: 'order/:id', name: 'h5-order', component: () => import('@/views/h5/order.vue'), meta: { title: '订单详情', public: true } },
-      { path: 'my', name: 'h5-my', component: () => import('@/views/h5/my.vue'), meta: { title: '我的订单', public: true } }
+      { path: 'my', name: 'h5-my', component: () => import('@/views/h5/my.vue'), meta: { title: '我的', public: true } }
     ]
   },
 
