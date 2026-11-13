@@ -29,7 +29,7 @@
       <router-link v-for="t in TABS" :key="t.path" :to="t.path" class="tab" :class="{ on: route.path === t.path }">
         <span class="ico">{{ t.icon }}</span>
         <span class="label">{{ t.label }}</span>
-        <i v-if="t.path === '/rider/mine' && rider.onTheWay" class="badge">{{ rider.onTheWay }}</i>
+        <i v-if="t.path === '/rider/mine' && onTheWay" class="badge">{{ onTheWay }}</i>
       </router-link>
     </nav>
   </div>
@@ -53,6 +53,8 @@ const TABS = [
 ]
 
 const rider = computed(() => riderStore.profile || {})
+/** 在途单数取 stats（按真实订单统计），不取 profile 上的缓存字段，否则没接单也会冒出红点 */
+const onTheWay = computed(() => Number(riderStore.stats?.onTheWay || 0))
 const switching = ref(false)
 
 async function onToggleOnline(next) {

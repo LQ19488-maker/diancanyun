@@ -14,7 +14,7 @@ const ok = (data) => ({ code: 200, message: 'ok', data })
 const fail = (code, message) => ({ code, message, data: null })
 
 /** 数据结构变化时改版本号，旧的 localStorage 数据自动作废 */
-const STORE_KEY = 'dcy_mock_db_v7'
+const STORE_KEY = 'dcy_mock_db_v8'
 
 function seed() {
   const now = Date.now()
@@ -210,7 +210,11 @@ function seed() {
       timeline.push({ status: 'CANCELED', time: new Date(new Date(createdAt).getTime() + 4 * 3600000).toISOString() })
     }
     const needRider = status === 'DELIVERING' || status === 'DONE'
-    const riderRow = needRider ? riders[i % riders.length] : null
+    // 演示账号 rider / rider2 就是前两位骑手：在途单派给别人，
+    // 这样刚登录时「我的配送」是干净的（不会一进来就顶个红点），已完成的历史单照样留着
+    const riderRow = !needRider
+      ? null
+      : riders[status === 'DELIVERING' ? 2 + (i % Math.max(1, riders.length - 2)) : i % riders.length]
     orders.push({
       id: String(5001 + i),
       orderNo: 'DC' + String(now).slice(-6) + String(1001 + i),
@@ -375,6 +379,16 @@ const routes = [
       if (notEmpty(online)) rows = rows.filter((r) => Number(r.online) === Number(online))
       if (notEmpty(status)) rows = rows.filter((r) => Number(r.status) === Number(status))
       rows.sort((a, b) => (a.updateTime < b.updateTime ? 1 : -1))
+      // 「完成 / 在途」也从订单里数，和骑手端看到的一致，不再是写死的演示数字
+      const orders = db.orders || []
+      rows = rows.map((r) => {
+        const mine = orders.filter((o) => String(o.riderId) === String(r.id))
+        return {
+          ...r,
+          doneCount: mine.filter((o) => o.status === 'DONE').length,
+          onTheWay: mine.filter((o) => o.status === 'DELIVERING').length
+        }
+      })
       return ok(paginate(rows, params))
     }
   },
@@ -431,7 +445,11 @@ const routes = [
       const db = load()
       const row = db.riders.find((r) => String(r.id) === String(match[1]))
       if (!row) return fail(4004, '骑手不存在')
-      if (Number(row.onTheWay) > 0) return fail(4001, `该骑手还有 ${row.onTheWay} 单在途，无法删除`)
+      // 在途单数从订单里数，有在途单就不许删（和列表上显示的「在途」是同一个口径）
+      const onTheWay = (db.orders || []).filter(
+        (o) => String(o.riderId) === String(row.id) && o.status === 'DELIVERING'
+      ).length
+      if (onTheWay > 0) return fail(4001, `该骑手还有 ${onTheWay} 单在途，无法删除`)
       db.riders = db.riders.filter((r) => String(r.id) !== String(match[1]))
       save(db)
       return ok(true)
@@ -814,7 +832,6 @@ const routes = [
       row.riderPhone = me.phone || ''
       row.status = 'DELIVERING'
       row.timeline = [...(row.timeline || []), { status: 'DELIVERING', time: new Date().toISOString() }]
-      me.onTheWay = Number(me.onTheWay || 0) + 1
       save(db)
       return ok(row)
     }
@@ -850,8 +867,6 @@ const routes = [
       if (row.status !== 'DELIVERING') return fail(4001, '该订单当前不是配送中')
       row.status = 'DONE'
       row.timeline = [...(row.timeline || []), { status: 'DONE', time: new Date().toISOString() }]
-      me.onTheWay = Math.max(0, Number(me.onTheWay || 0) - 1)
-      me.todayDone = Number(me.todayDone || 0) + 1
       save(db)
       return ok(row)
     }
@@ -867,11 +882,21 @@ const routes = [
       if (!me) return fail(4004, '骑手不存在')
       const mine = (db.orders || []).filter((o) => String(o.riderId) === String(me.id))
       const done = mine.filter((o) => o.status === 'DONE')
+      // 在途单 / 今日完成都从订单里数，不读骑手表上的缓存值，
+      // 否则没接过单也会显示数字（底部「我的配送」的红点就是这么来的）
+      const onTheWay = mine.filter((o) => o.status === 'DELIVERING').length
+      const todayKey = new Date().toISOString().slice(0, 10)
+      // 「今日完成」按送达时间算：订单可能是前几天下的，今天刚送完也算今天的活儿
+      const doneTimeOf = (o) => {
+        const hit = (o.timeline || []).filter((x) => x.status === 'DONE').pop()
+        return String(hit?.time || o.createdAt || '').slice(0, 10)
+      }
+      const todayDone = done.filter((o) => doneTimeOf(o) === todayKey).length
       const income = Number((done.length * 5).toFixed(2))
       return ok({
         online: Number(me.online),
-        todayDone: Number(me.todayDone || 0),
-        onTheWay: Number(me.onTheWay || 0),
+        todayDone,
+        onTheWay,
         rating: Number(me.rating || 5),
         totalDone: done.length,
         income,
