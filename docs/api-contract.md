@@ -9,14 +9,14 @@
 
 ## 〇、与 dandanyun 后端框架的对接现状（2026-11）
 
-后端仓库：<https://github.com/TianCha101/dandanyun>（最小运行框架：统一返回 + 全局异常 + 跨域 + 两套路径前缀，暂无数据库 / Redis / 登录）
+后端代码已放在本仓库 `backend/`：Java 25 + Spring Boot 4 + MySQL + JWT。
 
 ### 已经对齐的三条
 
-| 项 | 后端框架 | 前端实现 | 状态 |
+| 项 | 后端实现 | 前端实现 | 状态 |
 |---|---|---|---|
-| 响应体 | { code: 200, message: ok, data: {} } | http.js 的 unwrap()：code 为 0 或 200 视为成功，取 data；失败用 message（兼容旧字段 msg） | ✅ 已对齐 |
-| 路径前缀 | 管理端 /admin/**、用户端 /user/** | src/api/urls.js 里的 dminUrl() / userUrl()，所有 adapter 都走它 | ✅ 已对齐 |
+| 响应体 | `{ code: 200, message: "ok", data: {} }` | `http.js` 的 `unwrap()`：code 为 0 或 200 视为成功，取 data；失败用 message（兼容旧字段 msg） | ✅ 已对齐 |
+| 路径前缀 | 管理端 `/admin/**`、用户端 `/user/**` | `src/api/urls.js` 里的 `adminUrl()` / `userUrl()`，所有 adapter 都走它 | ✅ 已对齐 |
 | 同源部署 | 端口 8080，自带 CORS | VITE_API_BASE 留空（同源相对路径）；开发时 vite 代理 /admin、/user → 127.0.0.1:8080 | ✅ 已对齐 |
 
 > 换后端只改一个文件：路径前缀在 src/api/urls.js，响应体解包在 src/api/http.js。页面与 adapter 的字段映射不用动。
@@ -33,15 +33,15 @@
 | P2 | GET /admin/statistics/overview | 工作台指标卡与图表 | 见 2.3 节出参 |
 | P2 | POST /admin/upload | 菜品图片上传 | 返回 { url } |
 
-### 两条必须提前确认的后端细节
+### 已解决的后端细节
 
-1. **主键 Long 必须序列化成字符串**（雪花 ID 19 位，JS Number 只有 2^53 精度，否则查详情查不到）。
-2. **错误码表**：成功用 200 已知；未登录 / token 过期用哪个 code（401？2002？）、业务冲突用哪个（4001？），需要后端给一份，前端按它决定“跳登录”还是“只弹提示”。
+1. **主键 Long 已全局序列化为字符串**，避免 JavaScript 精度丢失。
+2. **错误码已统一**：401 表示未登录或过期，业务冲突使用 4001，资源不存在使用 4004，参数错误使用 1001。
 
-### 联调顺序建议（后端骨架已跑起来之后）
+### 联调顺序
 
 1. 先打 GET /health，确认 8080 可访问（前端可用 Invoke-WebRequest／浏览器直接开）
-2. 再做 POST /admin/login + GET /admin/employee/me，前端把 VITE_USE_MOCK 改成 alse 就能登录
+2. 再做 POST /admin/login + GET /admin/employee/me，前端把 `VITE_USE_MOCK` 改成 `false` 就能登录
 3. 然后一个列表接口（/admin/employee/page），验证分页字段与 Long 精度
 4. 逐个模块补齐，每补一个就在本文档「已知差异」表里登记一次
 
@@ -115,8 +115,8 @@
 
 | 方法 | 路径 | 入参 | 出参 `data` |
 |---|---|---|---|
-| POST | `/api/login` | `{ username, password }` | `{ token, user: { id, username, name, role } }` |
-| GET | `/api/employee/me` | — | `{ id, username, name, role }` |
+| POST | `/admin/login` | `{ username, password }` | `{ token, user: { id, username, name, role } }` |
+| GET | `/admin/employee/me` | — | `{ id, username, name, role }` |
 
 `role` 取值：`ADMIN`（管理员）、`STAFF`（员工）。若后端用数字，请告知，前端在 adapter 里映射。
 
@@ -124,11 +124,11 @@
 
 | 方法 | 路径 | 入参 | 出参 `data` |
 |---|---|---|---|
-| GET | `/api/employee/page` | `page, pageSize, name?, username?, role?, status?` | `{ total, records: [Employee] }` |
-| POST | `/api/employee` | `{ username, password, name, phone, role, status }` | `Employee` |
-| PUT | `/api/employee` | `{ id, name, phone, role, status }` | `Employee` |
-| DELETE | `/api/employee/{id}` | — | `true` |
-| PUT | `/api/employee/{id}/status` | `status=0\|1`（query） | `Employee` |
+| GET | `/admin/employee/page` | `page, pageSize, name?, username?, role?, status?` | `{ total, records: [Employee] }` |
+| POST | `/admin/employee` | `{ username, password, name, phone, role, status }` | `Employee` |
+| PUT | `/admin/employee` | `{ id, name, phone, role, status }` | `Employee` |
+| DELETE | `/admin/employee/{id}` | — | `true` |
+| PUT | `/admin/employee/{id}/status` | `status=0\|1`（query） | `Employee` |
 
 ```ts
 interface Employee {
@@ -147,7 +147,7 @@ interface Employee {
 
 | 方法 | 路径 | 入参 | 出参 `data` |
 |---|---|---|---|
-| GET | `/api/statistics/overview` | `startTime?, endTime?` | 见下 |
+| GET | `/admin/statistics/overview` | — | 见下 |
 
 ```json
 {
@@ -166,37 +166,37 @@ interface Employee {
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| GET | `/api/category/page` | 分页；入参 `type`（1 菜品 / 2 套餐）、`name` |
-| POST / PUT | `/api/category` | 新增 / 修改；字段 `id?, name, type, sort, status` |
-| DELETE | `/api/category/{id}` | 被菜品引用时返回 `4001` + `msg="该分类下还有 N 个菜品，无法删除"` |
-| GET | `/api/flavor/list?categoryId=` | 某分类下的口味（含口味值列表） |
-| PUT | `/api/flavor/{categoryId}` | **整体覆盖**：`{ flavors: [{ name, values: [{ name }] }] }` |
+| GET | `/admin/category/page` | 分页；入参 `type`（1 菜品 / 2 套餐）、`name` |
+| POST / PUT | `/admin/category` | 新增 / 修改；字段 `id?, name, type, sort, status` |
+| DELETE | `/admin/category/{id}` | 被菜品引用时返回 `4001` + `message="该分类下还有 N 个菜品，无法删除"` |
+| GET | `/admin/flavor/{categoryId}` | 某分类下的口味（含口味值列表） |
+| PUT | `/admin/flavor/{categoryId}` | **整体覆盖**：`{ flavors: [{ name, values: [{ name }] }] }` |
 
 ### 3.2 菜品
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| GET | `/api/dish/page` | 入参 `page,pageSize,name?,categoryId?,status?` |
-| POST / PUT | `/api/dish` | 字段 `id?, name, categoryId, price, image, description, status, flavorIds[]` |
-| DELETE | `/api/dish/{id}` | 套餐引用时 `4001` |
-| PUT | `/api/dish/{id}/status` | `status=0\|1` 起售 / 停售 |
-| POST | `/api/upload` | `multipart/form-data`，字段名 `file`，返回 `{ url: "/upload/xxx.jpg" }` |
+| GET | `/admin/dish/page` | 入参 `page,pageSize,name?,categoryId?,status?` |
+| POST / PUT | `/admin/dish` | 字段 `id?, name, categoryId, price, image, description, status, flavors[]` |
+| DELETE | `/admin/dish/{id}` | 套餐引用时 `4001` |
+| PUT | `/admin/dish/{id}/status` | `status=0\|1` 起售 / 停售 |
+| POST | `/admin/upload` | `multipart/form-data`，字段名 `file`，返回 `{ url: "/upload/xxx.jpg" }` |
 
 ### 3.3 套餐
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| GET | `/api/combo/page` | 入参 `page,pageSize,name?,categoryId?,status?` |
-| POST / PUT | `/api/combo` | 字段 `id?, name, categoryId, price, image, description, status, dishIds[]` |
-| GET | `/api/combo/{id}` | 详情含菜品明细（用于编辑回显） |
+| GET | `/admin/combo/page` | 入参 `page,pageSize,name?,categoryId?,status?` |
+| POST / PUT | `/admin/combo` | 字段 `id?, name, categoryId, price, image, description, status, dishIds[]` |
+| GET | `/admin/combo/{id}` | 详情含菜品明细（用于编辑回显） |
 
 ### 3.4 订单
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| GET | `/api/order/page` | 入参 `page,pageSize,orderNo?,status?,startTime?,endTime?,phone?` |
-| GET | `/api/order/{id}` | 详情：菜品明细 + 状态时间轴 + 金额三段 |
-| PUT | `/api/order/{id}/status` | `{ status: 'ACCEPTED' \| 'DELIVERING' \| 'DONE' \| 'CANCELED' }` |
+| GET | `/admin/order/page` | 入参 `page,pageSize,orderNo?,status?,startTime?,endTime?,phone?` |
+| GET | `/admin/order/{id}` | 详情：菜品明细 + 状态时间轴 + 金额三段 |
+| PUT | `/admin/order/{id}/status` | `{ status: 'ACCEPTED' \| 'DELIVERING' \| 'DONE' \| 'CANCELED' }` |
 
 **订单状态枚举**（前端 `constants/enums.js` 已按此实现状态机，请保持一致）：
 
@@ -212,10 +212,10 @@ interface Employee {
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| GET | `/api/h5/menu?tableNo=` | 分类 + 菜品（含口味）/ 套餐 |
-| POST | `/api/h5/order` | `{ tableNo, items:[{ dishId, flavorValueIds[], quantity }], remark }` |
-| GET | `/api/h5/order/{id}` | 订单详情与状态 |
-| GET | `/api/address/list`、POST `/api/address` | 收货地址 |
+| GET | `/user/menu?tableNo=` | 分类 + 在售菜品（含口味） |
+| POST | `/user/order` | `{ tableNo, items:[{ dishId, flavors:[{name,value}], quantity }], remark }` |
+| GET | `/user/order/{id}` | 订单详情与状态 |
+| GET | `/user/orders` | 我的订单分页 |
 
 ---
 
