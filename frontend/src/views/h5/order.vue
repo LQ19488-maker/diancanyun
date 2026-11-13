@@ -85,6 +85,10 @@
             <span>配送费</span>
             <span class="num">¥{{ order.deliveryFee.toFixed(2) }}</span>
           </div>
+          <div v-if="order.couponAmount > 0" class="line sub discount">
+            <span>优惠券{{ order.couponTitle ? `（${order.couponTitle}）` : '' }}</span>
+            <span class="num">-¥{{ order.couponAmount.toFixed(2) }}</span>
+          </div>
           <div class="line total">
             <span>合计</span>
             <span class="num">¥{{ order.totalAmount.toFixed(2) }}</span>
@@ -327,6 +331,10 @@ onBeforeUnmount(stopPoll)
   border: none;
   padding: 3px 0;
   color: #6b7280;
+}
+
+.line.sub.discount {
+  color: #c0392b;
 }
 
 .n {

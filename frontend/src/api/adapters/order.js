@@ -35,6 +35,10 @@ export function toModel(d = {}) {
     })),
     amount: Number(d.amount ?? 0),
     packFee: Number(d.packFee ?? 0),
+    /* 优惠券抵扣（团购/领券功能用） */
+    couponId: String(d.couponId ?? ''),
+    couponTitle: d.couponTitle ?? '',
+    couponAmount: Number(d.couponAmount ?? 0),
     totalAmount: Number(d.totalAmount ?? d.amount ?? 0),
     remark: d.remark ?? '',
     payStatus: d.payStatus ?? 'PAID',

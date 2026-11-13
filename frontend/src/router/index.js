@@ -63,6 +63,12 @@ export const riderRoutes = [
     name: 'rider-mine',
     component: () => import('@/views/rider/mine.vue'),
     meta: { title: '我的配送', menu: true, roles: [ROLE.RIDER] }
+  },
+  {
+    path: 'wallet',
+    name: 'rider-wallet',
+    component: () => import('@/views/rider/wallet.vue'),
+    meta: { title: '我的', menu: true, roles: [ROLE.RIDER] }
   }
 ]
 
@@ -100,6 +106,7 @@ const routes = [
       { path: 'shop', name: 'h5-shop', component: () => import('@/views/h5/shop.vue'), meta: { title: '选店铺', public: true } },
       { path: 'menu', name: 'h5-menu', component: () => import('@/views/h5/menu.vue'), meta: { title: '点餐', public: true } },
       { path: 'address', name: 'h5-address', component: () => import('@/views/h5/address.vue'), meta: { title: '收货地址', public: true } },
+      { path: 'coupons', name: 'h5-coupons', component: () => import('@/views/h5/coupons.vue'), meta: { title: '优惠券', public: true } },
       { path: 'cart', name: 'h5-cart', component: () => import('@/views/h5/cart.vue'), meta: { title: '购物车', public: true } },
       { path: 'confirm', name: 'h5-confirm', component: () => import('@/views/h5/confirm.vue'), meta: { title: '确认订单', public: true } },
       { path: 'order/:id', name: 'h5-order', component: () => import('@/views/h5/order.vue'), meta: { title: '订单详情', public: true } },

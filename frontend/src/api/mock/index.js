@@ -14,7 +14,7 @@ const ok = (data) => ({ code: 200, message: 'ok', data })
 const fail = (code, message) => ({ code, message, data: null })
 
 /** 数据结构变化时改版本号，旧的 localStorage 数据自动作废 */
-const STORE_KEY = 'dcy_mock_db_v10'
+const STORE_KEY = 'dcy_mock_db_v12'
 
 function seed() {
   const now = Date.now()
@@ -389,8 +389,85 @@ function seed() {
     c.dishCount = pool.filter((x) => String(x.categoryId) === String(c.id)).length
   })
 
+  /* ---------------- 优惠券（领券中心 + 我的券）---------------- */
+  const day = 86400000
+  const rawCoupons = [
+    ['新客立减 3 元', 0, 3, '', '无门槛，全场通用', 7],
+    ['满 30 减 5', 30, 5, '', '全场通用', 15],
+    ['满 50 减 10', 50, 10, '', '全场通用', 15],
+    ['满 80 减 18', 80, 18, '8001', '仅限点单云·中关村店', 30],
+    ['满 60 减 12', 60, 12, '8002', '仅限外婆家·五道口店', 30]
+  ]
+  const coupons = rawCoupons.map(([title, threshold, amount, shopId, desc, days], i) => ({
+    id: String(7001 + i),
+    title,
+    threshold,
+    amount,
+    shopId,
+    desc,
+    days,
+    left: 200 - i * 17
+  }))
+
+  const userCoupons = [
+    {
+      id: '7101',
+      couponId: '7002',
+      title: '满 30 减 5',
+      threshold: 30,
+      amount: 5,
+      shopId: '',
+      status: 'UNUSED',
+      expireAt: new Date(now + 12 * day).toISOString()
+    },
+    {
+      id: '7102',
+      couponId: '7003',
+      title: '满 50 减 10',
+      threshold: 50,
+      amount: 10,
+      shopId: '',
+      status: 'UNUSED',
+      expireAt: new Date(now + 5 * day).toISOString()
+    },
+    {
+      id: '7103',
+      couponId: '7005',
+      title: '满 60 减 12',
+      threshold: 60,
+      amount: 12,
+      shopId: '8002',
+      status: 'UNUSED',
+      expireAt: new Date(now + 20 * day).toISOString()
+    },
+    {
+      id: '7104',
+      couponId: '7001',
+      title: '新客立减 3 元',
+      threshold: 0,
+      amount: 3,
+      shopId: '',
+      status: 'USED',
+      usedAt: new Date(now - 3 * day).toISOString(),
+      expireAt: new Date(now + 4 * day).toISOString()
+    },
+    {
+      id: '7105',
+      couponId: '7004',
+      title: '满 80 减 18',
+      threshold: 80,
+      amount: 18,
+      shopId: '8001',
+      status: 'EXPIRED',
+      expireAt: new Date(now - 2 * day).toISOString()
+    }
+  ]
+
   return {
     riders,
+    coupons,
+    userCoupons,
+    seqUserCoupon: 7106,
     categories: [...categories, ...categories2],
     flavors,
     dishes: [...dishes, ...dishes2],
@@ -441,6 +518,75 @@ function currentShop() {
     return ACCOUNT_SHOP[username] || ACCOUNT_SHOP.merchant
   } catch {
     return ACCOUNT_SHOP.merchant
+  }
+}
+
+/**
+ * 演示用的天气：按小时变，每个时段配一个补贴。
+ * 真实系统里补贴应由平台后台按「天气 + 时段」配置，
+ * 这里按时段写死，保证任何时候打开演示都能看到补贴。
+ */
+function currentWeather() {
+  const hour = new Date().getHours()
+  let main
+  if (hour >= 6 && hour < 10) {
+    main = { condition: '阴', icon: '☁️', temperature: 16, active: true, amount: 1.5, reason: '早高峰配送补贴' }
+  } else if (hour >= 10 && hour < 19) {
+    main = { condition: '小雨', icon: '🌧', temperature: 16, active: true, amount: 2, reason: '雨天配送补贴' }
+  } else {
+    main = { condition: '多云', icon: '⛅', temperature: 14, active: true, amount: 2, reason: '夜间配送补贴' }
+  }
+  return {
+    city: '北京 · 中关村',
+    condition: main.condition,
+    icon: main.icon,
+    temperature: main.temperature,
+    feelsLike: main.temperature - 2,
+    wind: '东北风 3 级',
+    humidity: main.condition === '小雨' ? 82 : 55,
+    tomorrow: { condition: '阵雨', icon: '🌦', tempLow: 12, tempHigh: 19 },
+    subsidy: {
+      active: main.active,
+      amount: main.amount,
+      reason: main.reason || '当前天气正常，无补贴',
+      note: '补贴按时段与天气自动计算，每完成一单计入收入'
+    },
+    updateTime: new Date().toISOString()
+  }
+}
+
+/** 骑手收入口径（工作台和钱包都用这一份，避免两处算出不同的钱） */
+function riderIncome(db, me) {
+  const base = 5
+  const mine = (db.orders || []).filter((o) => String(o.riderId) === String(me.id))
+  const done = mine.filter((o) => o.status === 'DONE')
+  const todayKey = new Date().toISOString().slice(0, 10)
+  const doneTimeOf = (o) => {
+    const hit = (o.timeline || []).filter((x) => x.status === 'DONE').pop()
+    return String(hit?.time || o.createdAt || '').slice(0, 10)
+  }
+  const todayDone = done.filter((o) => doneTimeOf(o) === todayKey).length
+  const weather = currentWeather()
+  const subsidyPer = weather.subsidy.active ? Number(weather.subsidy.amount) : 0
+  const todaySubsidy = Number((todayDone * subsidyPer).toFixed(2))
+  const baseIncome = Number((done.length * base).toFixed(2))
+  const totalIncome = Number((baseIncome + todaySubsidy).toFixed(2))
+  const wallet = (db.riderWallets || {})[String(me.id)] || { withdrawn: 0, records: [] }
+  const withdrawn = Number(wallet.withdrawn || 0)
+  return {
+    basePrice: base,
+    doneCount: done.length,
+    todayDone,
+    baseIncome,
+    subsidyPer,
+    todaySubsidy,
+    todayIncome: Number((todayDone * base + todaySubsidy).toFixed(2)),
+    totalIncome,
+    withdrawn,
+    balance: Number(Math.max(0, totalIncome - withdrawn).toFixed(2)),
+    onTheWay: mine.filter((o) => o.status === 'DELIVERING').length,
+    rating: Number(me.rating || 5),
+    records: wallet.records || []
   }
 }
 
@@ -1038,6 +1184,63 @@ const routes = [
   },
   {
     method: 'get',
+    url: /^\/rider\/weather$/,
+    handler: () => ok(currentWeather())
+  },
+  {
+    method: 'get',
+    url: /^\/rider\/wallet$/,
+    handler: () => {
+      const db = load()
+      const token = localStorage.getItem('dcy_token') || ''
+      const me = (db.riders || []).find((r) => r.username === token.replace('mock-token-', ''))
+      if (!me) return fail(4004, '骑手不存在')
+      const inc = riderIncome(db, me)
+      return ok({
+        balance: inc.balance,
+        totalIncome: inc.totalIncome,
+        baseIncome: inc.baseIncome,
+        todayIncome: inc.todayIncome,
+        todaySubsidy: inc.todaySubsidy,
+        subsidyPer: inc.subsidyPer,
+        withdrawn: inc.withdrawn,
+        basePrice: inc.basePrice,
+        records: inc.records.slice().reverse()
+      })
+    }
+  },
+  {
+    method: 'post',
+    url: /^\/rider\/withdraw$/,
+    handler: ({ data }) => {
+      const db = load()
+      const token = localStorage.getItem('dcy_token') || ''
+      const me = (db.riders || []).find((r) => r.username === token.replace('mock-token-', ''))
+      if (!me) return fail(4004, '骑手不存在')
+      const inc = riderIncome(db, me)
+      const amount = Number((data || {}).amount)
+      if (!amount || amount <= 0) return fail(1001, '请输入提现金额')
+      if (amount < 1) return fail(1001, '单次最少提现 ¥1')
+      if (amount > inc.balance) return fail(4001, `余额不足，当前可提 ¥${inc.balance.toFixed(2)}`)
+      const key = String(me.id)
+      db.riderWallets = db.riderWallets || {}
+      const wallet = db.riderWallets[key] || { withdrawn: 0, records: [] }
+      const record = {
+        id: 'W' + String(Date.now()).slice(-8),
+        amount: Number(amount.toFixed(2)),
+        channel: (data || {}).channel || '微信零钱',
+        status: 'PAID',
+        createdAt: new Date().toISOString()
+      }
+      wallet.withdrawn = Number((Number(wallet.withdrawn || 0) + amount).toFixed(2))
+      wallet.records = [...(wallet.records || []), record]
+      db.riderWallets[key] = wallet
+      save(db)
+      return ok({ record, balance: Number(Math.max(0, inc.totalIncome - wallet.withdrawn).toFixed(2)) })
+    }
+  },
+  {
+    method: 'get',
     url: /^\/rider\/stats$/,
     handler: () => {
       const db = load()
@@ -1045,26 +1248,19 @@ const routes = [
       const username = token.replace('mock-token-', '')
       const me = (db.riders || []).find((r) => r.username === username)
       if (!me) return fail(4004, '骑手不存在')
-      const mine = (db.orders || []).filter((o) => String(o.riderId) === String(me.id))
-      const done = mine.filter((o) => o.status === 'DONE')
-      // 在途单 / 今日完成都从订单里数，不读骑手表上的缓存值，
-      // 否则没接过单也会显示数字（底部「我的配送」的红点就是这么来的）
-      const onTheWay = mine.filter((o) => o.status === 'DELIVERING').length
-      const todayKey = new Date().toISOString().slice(0, 10)
-      // 「今日完成」按送达时间算：订单可能是前几天下的，今天刚送完也算今天的活儿
-      const doneTimeOf = (o) => {
-        const hit = (o.timeline || []).filter((x) => x.status === 'DONE').pop()
-        return String(hit?.time || o.createdAt || '').slice(0, 10)
-      }
-      const todayDone = done.filter((o) => doneTimeOf(o) === todayKey).length
-      const income = Number((done.length * 5).toFixed(2))
+      // 在途单、今日完成、收入全部按真实订单统计（口径在 riderIncome 里只写一份）
+      const inc = riderIncome(db, me)
       return ok({
         online: Number(me.online),
-        todayDone,
-        onTheWay,
-        rating: Number(me.rating || 5),
-        totalDone: done.length,
-        income,
+        todayDone: inc.todayDone,
+        onTheWay: inc.onTheWay,
+        rating: inc.rating,
+        totalDone: inc.doneCount,
+        income: inc.totalIncome,
+        baseIncome: inc.baseIncome,
+        todaySubsidy: inc.todaySubsidy,
+        subsidyPer: inc.subsidyPer,
+        balance: inc.balance,
         availableTasks: (db.orders || []).filter((o) => o.status === 'ACCEPTED' && !o.riderId).length
       })
     }
@@ -1184,6 +1380,73 @@ const routes = [
     }
   },
 
+  /* ---------------- 用户端：优惠券 ---------------- */
+  {
+    method: 'get',
+    url: /^\/user\/coupon\/templates$/,
+    handler: () => {
+      const db = load()
+      const mine = db.userCoupons || []
+      const rows = (db.coupons || []).map((c) => ({
+        ...c,
+        // 已用掉 / 已过期的券可以再领一次，所以只把「手上还没用的」算作已领取
+        claimed: mine.some((u) => String(u.couponId) === String(c.id) && u.status === 'UNUSED')
+      }))
+      return ok({ total: rows.length, records: rows })
+    }
+  },
+  {
+    method: 'post',
+    url: /^\/user\/coupon\/(\w+)\/claim$/,
+    handler: ({ match }) => {
+      const db = load()
+      const tpl = (db.coupons || []).find((c) => String(c.id) === String(match[1]))
+      if (!tpl) return fail(4004, '优惠券不存在')
+      if ((db.userCoupons || []).some((u) => String(u.couponId) === String(tpl.id) && u.status === 'UNUSED')) {
+        return fail(4001, '这张券已经领过了')
+      }
+      const row = {
+        id: String(db.seqUserCoupon++),
+        couponId: String(tpl.id),
+        title: tpl.title,
+        threshold: Number(tpl.threshold),
+        amount: Number(tpl.amount),
+        shopId: tpl.shopId || '',
+        status: 'UNUSED',
+        expireAt: new Date(Date.now() + Number(tpl.days || 7) * 86400000).toISOString()
+      }
+      db.userCoupons = [...(db.userCoupons || []), row]
+      save(db)
+      return ok(row)
+    }
+  },
+  {
+    method: 'get',
+    url: /^\/user\/coupons$/,
+    handler: ({ params }) => {
+      const db = load()
+      const { status, orderAmount, shopId } = params || {}
+      let rows = (db.userCoupons || []).slice()
+      if (status) rows = rows.filter((u) => u.status === status)
+      // 下单页只关心「这家店现在能不能用」
+      if (notEmpty(orderAmount)) {
+        const amount = Number(orderAmount)
+        rows = rows.map((u) => ({
+          ...u,
+          usable:
+            u.status === 'UNUSED' &&
+            (!u.shopId || String(u.shopId) === String(shopId || '')) &&
+            amount >= Number(u.threshold || 0)
+        }))
+      }
+      rows.sort((a, b) => {
+        if (a.status !== b.status) return a.status === 'UNUSED' ? -1 : 1
+        return (a.expireAt || '') < (b.expireAt || '') ? -1 : 1
+      })
+      return ok({ total: rows.length, records: rows })
+    }
+  },
+
   /* ---------------- 用户端：菜单与订单 ---------------- */
   {
     method: 'get',
@@ -1210,9 +1473,28 @@ const routes = [
             values: (f.values || []).map((v) => (typeof v === 'string' ? v : v.name))
           }))
         }))
+      // 团购套餐（多人餐）：在售的、属于这家店的
+      const combos = (db.combos || [])
+        .filter((c) => Number(c.status) === 1 && String(c.shopId || '8001') === shopId)
+        .map((c) => {
+          const inner = (c.dishIds || [])
+            .map((id) => (db.dishes || []).find((d) => String(d.id) === String(id)))
+            .filter(Boolean)
+          return {
+            id: String(c.id),
+            name: c.name,
+            image: c.image,
+            price: Number(c.price),
+            originPrice: Number(inner.reduce((t, d) => t + Number(d.price || 0), 0).toFixed(2)),
+            dishCount: inner.length,
+            dishNames: inner.map((d) => d.name),
+            description: c.description || ''
+          }
+        })
       return ok({
         categories: cats.map((c) => ({ id: String(c.id), name: c.name })).sort((a, b) => Number(a.id) - Number(b.id)),
-        dishes
+        dishes,
+        combos
       })
     }
   },
@@ -1224,12 +1506,28 @@ const routes = [
       const body = data || {}
       const items = (body.items || [])
         .map((it) => {
+          const qty = Number(it.quantity) || 1
+          // 团购套餐：按套餐价算，明细里写清「含 N 道菜」
+          if (it.comboId) {
+            const combo = (db.combos || []).find((c) => String(c.id) === String(it.comboId))
+            if (!combo) return null
+            return {
+              comboId: String(combo.id),
+              dishId: '',
+              dishName: combo.name,
+              kind: 'COMBO',
+              quantity: qty,
+              unitPrice: Number(combo.price),
+              amount: Number((combo.price * qty).toFixed(2)),
+              flavors: [`含 ${(combo.dishIds || []).length} 道菜`]
+            }
+          }
           const dish = (db.dishes || []).find((d) => String(d.id) === String(it.dishId))
           if (!dish) return null
-          const qty = Number(it.quantity) || 1
           return {
             dishId: String(dish.id),
             dishName: dish.name,
+            kind: 'DISH',
             quantity: qty,
             unitPrice: Number(dish.price),
             amount: Number((dish.price * qty).toFixed(2)),
@@ -1250,6 +1548,23 @@ const routes = [
         return fail(4001, `未达起送价 ¥${shop.minPrice}，还差 ¥${(Number(shop.minPrice) - amount).toFixed(2)}`)
       }
 
+      // 优惠券：只能用自己手上、未使用、满足门槛、且适用这家店的券
+      let couponRow = null
+      let couponAmount = 0
+      if (body.couponId) {
+        couponRow = (db.userCoupons || []).find((u) => String(u.id) === String(body.couponId))
+        if (!couponRow) return fail(4004, '优惠券不存在')
+        if (couponRow.status !== 'UNUSED') return fail(4001, '这张券已经用过了')
+        if (couponRow.shopId && String(couponRow.shopId) !== String(body.shopId)) {
+          return fail(4001, '这张券不适用于当前店铺')
+        }
+        if (amount < Number(couponRow.threshold || 0)) {
+          return fail(4001, `还差 ¥${(Number(couponRow.threshold) - amount).toFixed(2)} 才能用这张券`)
+        }
+        // 抵扣不超过菜品金额，配送费照付
+        couponAmount = Number(Math.min(Number(couponRow.amount || 0), amount).toFixed(2))
+      }
+
       const nowIso = new Date().toISOString()
       const row = {
         id: String(db.seqOrder || 5001 + (db.orders || []).length),
@@ -1268,7 +1583,10 @@ const routes = [
         amount,
         packFee: 0,
         deliveryFee,
-        totalAmount: Number((amount + deliveryFee).toFixed(2)),
+        couponId: couponRow ? String(couponRow.id) : '',
+        couponTitle: couponRow ? couponRow.title : '',
+        couponAmount,
+        totalAmount: Number((amount + deliveryFee - couponAmount).toFixed(2)),
         remark: body.remark || '',
         payStatus: 'UNPAID',
         status: 'PENDING',
@@ -1277,6 +1595,11 @@ const routes = [
       }
       db.seqOrder = Number(row.id) + 1
       db.orders = [row, ...(db.orders || [])]
+      if (couponRow) {
+        couponRow.status = 'USED'
+        couponRow.usedAt = nowIso
+        couponRow.orderId = row.id
+      }
       save(db)
       return ok(row)
     }

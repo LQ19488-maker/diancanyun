@@ -18,6 +18,9 @@
     <!-- 分类竖排 + 菜品列表 -->
     <div class="body">
       <aside class="rail">
+        <div v-if="combos.length" class="rail-item" :class="{ on: activeId === COMBO_TAB }" @click="activeId = COMBO_TAB">
+          超值套餐
+        </div>
         <div
           v-for="c in categories"
           :key="c.id"
@@ -33,6 +36,30 @@
         <div v-if="loading" class="pad">
           <div v-for="i in 4" :key="i" class="skeleton-block" style="height: 76px; margin-bottom: 10px" />
         </div>
+
+        <!-- 团购套餐 -->
+        <div v-else-if="activeId === COMBO_TAB" class="pad">
+          <el-empty v-if="!combos.length" description="这家店暂时没有团购套餐" :image-size="70" />
+          <div v-for="c in combos" :key="c.id" class="dish combo">
+            <el-image v-if="c.imageUrl" :src="c.imageUrl" fit="cover" class="thumb" />
+            <div class="info">
+              <div class="name">
+                {{ c.name }}
+                <el-tag size="small" type="danger" effect="plain" class="combo-tag">团购</el-tag>
+              </div>
+              <div class="desc">{{ c.dishNames.join('、') }}</div>
+              <div class="flavor">含 {{ c.dishCount }} 道菜，比单点省 ¥{{ c.save.toFixed(2) }}</div>
+              <div class="row">
+                <span class="price">
+                  ¥{{ c.price.toFixed(2) }}
+                  <i class="origin">¥{{ c.originPrice.toFixed(2) }}</i>
+                </span>
+                <el-button type="primary" circle size="small" :icon="Plus" @click="onAddCombo(c)" />
+              </div>
+            </div>
+          </div>
+        </div>
+
         <el-empty v-else-if="!dishes.length" description="这家店暂时没有在售菜品" :image-size="70" />
         <div v-else class="pad">
           <div v-for="d in dishes" :key="d.id" class="dish">
@@ -112,7 +139,11 @@ const cart = useCartStore()
 const loading = ref(false)
 const categories = ref([])
 const allDishes = ref([])
+const combos = ref([])
 const activeId = ref('')
+
+/** 虚拟分类：团购套餐不占真实分类，排在最上面 */
+const COMBO_TAB = '__combo__'
 
 const specVisible = ref(false)
 const specDish = ref(null)
@@ -135,12 +166,13 @@ async function load() {
         return
       }
     }
-    const { categories: cats, dishes: list } = await api.h5.menu({ shopId: cart.shop?.id })
+    const { categories: cats, dishes: list, combos: comboList } = await api.h5.menu({ shopId: cart.shop?.id })
     categories.value = cats
     allDishes.value = list
-    // 默认选中第一个"有菜"的分类，避免点进来看到空列表
+    combos.value = comboList || []
+    // 默认选中第一个"有菜"的分类；这家店有团购套餐就先进套餐页
     const firstWithDish = cats.find((c) => list.some((d) => d.categoryId === c.id))
-    activeId.value = (firstWithDish || cats[0])?.id || ''
+    activeId.value = combos.value.length ? COMBO_TAB : (firstWithDish || cats[0])?.id || ''
   } catch (e) {
     ElMessage.error(e?.message || '菜单加载失败')
   } finally {
@@ -170,6 +202,12 @@ function confirmAdd() {
   cart.add(specDish.value, { ...selection.value }, quantity.value)
   ElMessage.success(`已加入 ${specDish.value.name}`)
   specVisible.value = false
+}
+
+/** 团购套餐一次就是一整套，不做口味选择 */
+function onAddCombo(combo) {
+  cart.addCombo(combo, 1)
+  ElMessage.success(`已加入 ${combo.name}`)
 }
 
 onMounted(load)
@@ -293,6 +331,20 @@ onMounted(load)
   margin-top: 2px;
   font-size: 11px;
   color: #b45309;
+}
+
+.combo-tag {
+  margin-left: 4px;
+  vertical-align: middle;
+}
+
+.origin {
+  margin-left: 4px;
+  font-size: 11px;
+  font-weight: 400;
+  color: #9aa3b2;
+  text-decoration: line-through;
+  font-style: normal;
 }
 
 .row {

@@ -31,11 +31,25 @@
         </div>
       </div>
 
+      <!-- 优惠券 -->
+      <div class="card coupon-row" @click="couponVisible = true">
+        <span class="label">优惠券</span>
+        <span v-if="cart.coupon && cart.couponUsable" class="coupon-on">
+          {{ cart.coupon.title }}　-¥{{ cart.couponDiscount.toFixed(2) }}
+        </span>
+        <span v-else-if="usableCoupons.length" class="coupon-tip">
+          {{ usableCoupons.length }} 张可用
+        </span>
+        <span v-else class="coupon-tip">{{ couponsLoaded ? '暂无可用券' : '加载中…' }}</span>
+        <span class="arrow small">›</span>
+      </div>
+
       <div class="card">
         <div class="section-title">订单明细</div>
         <div v-for="it in cart.items" :key="it.key" class="line">
           <span class="n"
-            >{{ it.name }}<i v-if="Object.keys(it.selection || {}).length" class="sel">
+            >{{ it.name }}<i v-if="it.kind === 'COMBO'" class="sel">团购套餐</i>
+            <i v-else-if="Object.keys(it.selection || {}).length" class="sel">
               {{ Object.entries(it.selection).map(([k, v]) => `${k}:${v}`).join(' ') }}</i
             ></span
           >
@@ -51,6 +65,10 @@
             <span>配送费</span>
             <span class="num">¥{{ cart.deliveryFee.toFixed(2) }}</span>
           </div>
+          <div v-if="cart.couponDiscount > 0" class="line sub discount">
+            <span>优惠券（{{ cart.coupon.title }}）</span>
+            <span class="num">-¥{{ cart.couponDiscount.toFixed(2) }}</span>
+          </div>
           <div class="line total">
             <span>合计</span>
             <span class="num">¥{{ cart.payableAmount.toFixed(2) }}</span>
@@ -58,6 +76,37 @@
         </div>
       </div>
     </div>
+
+    <!-- 选券面板 -->
+    <el-dialog v-model="couponVisible" title="选择优惠券" width="90%" align-center class="coupon-dialog">
+      <div class="coupon-list">
+        <div class="coupon-item" :class="{ on: !cart.coupon }" @click="pickCoupon(null)">
+          <div class="ci-title">不使用优惠券</div>
+          <div class="ci-sub">按原价支付</div>
+        </div>
+        <div
+          v-for="c in usableCoupons"
+          :key="c.id"
+          class="coupon-item"
+          :class="{ on: cart.coupon?.id === c.id }"
+          @click="pickCoupon(c)"
+        >
+          <div class="ci-amount">¥{{ c.amount }}</div>
+          <div class="ci-body">
+            <div class="ci-title">{{ c.title }}</div>
+            <div class="ci-sub">
+              {{ c.threshold > 0 ? `满 ${c.threshold} 可用` : '无门槛' }} ·
+              {{ c.shopId ? '限本店' : '全场通用' }}
+            </div>
+          </div>
+        </div>
+        <el-empty v-if="!usableCoupons.length" description="当前金额没有可用的券" :image-size="60" />
+      </div>
+      <template #footer>
+        <el-button @click="couponVisible = false">关闭</el-button>
+        <el-button type="primary" @click="couponVisible = false">确定</el-button>
+      </template>
+    </el-dialog>
 
     <div class="foot">
       <div class="sum">
@@ -70,7 +119,7 @@
 </template>
 
 <script setup>
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import api from '@/api'
@@ -82,6 +131,10 @@ const cart = useCartStore()
 const remark = ref(localStorage.getItem('dcy_h5_remark') || '')
 const submitting = ref(false)
 
+const couponVisible = ref(false)
+const couponsLoaded = ref(false)
+const usableCoupons = ref([])
+
 /** 进页面先兜一个默认地址，用户少点一次 */
 async function ensureAddress() {
   if (cart.address) return
@@ -92,6 +145,26 @@ async function ensureAddress() {
   } catch {
     /* 地址拉不到就让用户手动去选 */
   }
+}
+
+/** 拉当前店铺、当前金额下能用的券；金额变了要重算，所以放在 watch 里 */
+async function loadCoupons() {
+  if (!cart.shop || cart.isEmpty) return
+  try {
+    usableCoupons.value = await api.coupon.available(cart.totalAmount, cart.shop.id)
+    couponsLoaded.value = true
+    // 之前选的券现在用不了（比如删了菜），自动取消
+    if (cart.coupon && !cart.couponUsable) cart.setCoupon(null)
+  } catch {
+    usableCoupons.value = []
+    couponsLoaded.value = true
+  }
+}
+
+function pickCoupon(c) {
+  cart.setCoupon(c)
+  couponVisible.value = false
+  if (c) ElMessage.success(`已选券：${c.title}`)
 }
 
 async function onSubmit() {
@@ -120,7 +193,15 @@ async function onSubmit() {
   }
 }
 
-onMounted(ensureAddress)
+watch(
+  () => [cart.totalAmount, cart.shop?.id, cart.items.length],
+  loadCoupons
+)
+
+onMounted(async () => {
+  await ensureAddress()
+  await loadCoupons()
+})
 </script>
 
 <style scoped>
@@ -176,6 +257,82 @@ onMounted(ensureAddress)
   transform: translateY(-50%);
   color: #c4cad6;
   font-size: 18px;
+}
+
+.coupon-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  cursor: pointer;
+  padding-right: 26px;
+}
+
+.coupon-on {
+  font-size: 13px;
+  color: #c0392b;
+  font-weight: 600;
+}
+
+.coupon-tip {
+  font-size: 13px;
+  color: #1a4d8f;
+}
+
+.arrow.small {
+  font-size: 16px;
+}
+
+.discount {
+  color: #c0392b;
+}
+
+.coupon-list {
+  max-height: 52vh;
+  overflow-y: auto;
+}
+
+.coupon-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid #e5e9f0;
+  border-radius: 8px;
+  margin-bottom: 8px;
+  cursor: pointer;
+}
+
+.coupon-item.on {
+  border-color: #1a4d8f;
+  background: #f4f8fd;
+}
+
+.ci-amount {
+  width: 62px;
+  flex: none;
+  text-align: center;
+  font-size: 18px;
+  font-weight: 700;
+  color: #c0392b;
+}
+
+.ci-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.ci-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1f2d3d;
+}
+
+.ci-sub {
+  margin-top: 2px;
+  font-size: 11px;
+  color: #9aa3b2;
 }
 
 .row {
