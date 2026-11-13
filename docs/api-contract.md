@@ -87,6 +87,8 @@ USER_PREFIX  = '/user'    // 顾客端
 | P1 | GET/PUT /admin/flavor/{categoryId} | 口味配置（整体覆盖） | PUT 入参 { flavors:[{name, values:[{name}]}] } |
 | P2 | GET /admin/statistics/overview | 工作台指标卡与图表 | 见 2.3 节出参 |
 | P2 | POST /admin/upload | 菜品图片上传 | 返回 { url } |
+| P0 | `GET /user/coupon/templates`、`POST /user/coupon/{id}/claim`、`GET /user/coupons` | 领券中心、领券、我的券 | 见 3.8；`claimed` 只表示手上有未用一张，`orderAmount`+`shopId` 时回 `usable` |
+| P0 | `GET /rider/weather`、`GET /rider/wallet`、`POST /rider/withdraw` | 骑手天气补贴、钱包与提现 | 见 3.8；天气为演示固定数据，补贴按时段计算 |
 
 ### 已解决的后端细节
 
@@ -94,9 +96,11 @@ USER_PREFIX  = '/user'    // 顾客端
 2. **错误码已统一**：401 表示未登录或过期，业务冲突使用 4001，资源不存在使用 4004，参数错误使用 1001。
 3. **时间统一为 `yyyy-MM-dd HH:mm:ss`**（`JacksonConfig` 里的三个序列化器，日期/时间各自格式）。
 4. **计数与分页是 JSON 数字**：`total`、`page`、`pageSize`、`dishCount`、`status-count` 各计数都按 int 输出，不再是字符串。
-5. **满减与金额口径已落地**：`totalAmount = amount - discount + packFee + deliveryFee`，减免额不会超过菜品小计。
-6. **测试**：`mvn test` 含 10 个真连 MySQL 的集成用例（登录/越权/分页/时间格式/满减/店铺设置/订单全流程），
-   本机没有 MySQL 时这 10 个自动跳过，不会把构建搞红；另有契约路由表校验与不依赖数据库的冒烟测试。
+5. **满减与金额口径已落地**：`totalAmount = amount - discount - couponAmount + packFee + deliveryFee`，减免额与券抵扣都不会让总额出现负数。
+6. **测试**：`mvn test` 含 14 个真连 MySQL 的集成用例（登录/越权/分页/时间格式/满减/店铺设置/订单全流程/优惠券/套餐列表/钱包提现），
+   本机没有 MySQL 时这 14 个自动跳过，不会把构建搞红；另有契约路由表校验与不依赖数据库的冒烟测试。
+7. **优惠券可叠加店铺满减**：先减满减，再用券抵扣，券的抵扣上限是菜品小计；券门槛按菜品金额算，不含配送费。
+8. **骑手收入只有一套公式**：`完成单数×5 + 当日完成单数×天气补贴`，`balance = 累计收入 − 已提现`，`/rider/stats` 与 `/rider/wallet` 读同一份计算。
 
 ### 联调顺序
 
@@ -282,13 +286,13 @@ interface Rider {
 |---|---|---|
 | GET | `/user/shops` | 店铺列表，入参 `keyword?,page,pageSize`；返回 `{total,records}`，每条含 `rating,monthlySales,minPrice,deliveryFee,fullAmount,reduceAmount,deliveryTime,distance,status,openMenu,tags` |
 | GET | `/user/shop/{id}` | 店铺详情（菜单页头部用） |
-| GET | `/user/menu?shopId=` | 分类 + 在售菜品（含口味），**按店铺返回**；不传 shopId 时退回第一家店 |
+| GET | `/user/menu?shopId=` | 分类 + 在售菜品（含口味）+ **在售团购套餐 `combos`**，按店铺返回；不传 shopId 时退回第一家店 |
 | GET | `/user/addresses` | 收货地址列表，按默认地址优先排序 |
 | POST | `/user/address` | 新增：`{ tag,name,phone,detail,isDefault }` |
 | PUT | `/user/address` | 编辑：`{ id, tag?,name?,phone?,detail? }` |
 | PUT | `/user/address/{id}/default` | 设为默认地址 |
 | DELETE | `/user/address/{id}` | 删除地址 |
-| POST | `/user/order` | 下单：`{ shopId,addressId,remark,items:[{dishId,quantity,flavors:[{name,value}]}] }` |
+| POST | `/user/order` | 下单：`{ shopId,addressId,couponId?,remark,items:[{dishId,quantity,flavors:[{name,value}]}] }` |
 | GET | `/user/order/{id}` | 订单详情：状态时间轴 + 骑手信息 + 收货信息 |
 | GET | `/user/orders` | 我的订单（只返回当前登录顾客自己的单） |
 
@@ -296,7 +300,8 @@ interface Rider {
 
 | 字段 | 说明 |
 |---|---|
-| `shopName` / `deliveryFee` / `packFee` / `discount` | 店铺名、配送费、打包费、满减金额。金额口径固定为：`totalAmount = amount - discount + packFee + deliveryFee`（先算菜品小计，再减满减，最后加打包费与配送费） |
+| `shopName` / `deliveryFee` / `packFee` / `discount` | 店铺名、配送费、打包费、满减金额。金额口径固定为：`totalAmount = amount - discount - couponAmount + packFee + deliveryFee`（先算菜品小计，再减满减，再用券抵扣，最后加打包费与配送费） |
+| `couponId` / `couponTitle` / `couponAmount` | 用了券才有值。`couponAmount` 是券实际抵扣的金额（不会超过菜品小计），前端据此显示「优惠券 -¥x」 |
 | `addressInfo` | `{ name, phone, detail, tag }` 下单时的地址快照，地址被改/删后历史订单不受影响 |
 | `riderName` / `riderPhone` | 骑手接单后回填，顾客端据此显示「骑手正在配送」与联系电话 |
 
@@ -341,6 +346,46 @@ interface Rider {
 - `status`、`openMenu` 只能是 `0` 或 `1`
 - `id` 传了但不是自己那家店 → 拒绝
 
+### 3.8 优惠券与骑手钱包（后端已实现）
+
+**领券与我的券**
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | `/user/coupon/templates` | 领券中心：`{total,records:[{id,title,threshold,amount,shopId,desc,left,claimed}]}`；`claimed` 只表示「手上还有一张未用」，用掉或过期后可以再领 |
+| POST | `/user/coupon/{id}/claim` | 领取，返回一张具体的券；重复领取 → HTTP 400 + `code: 4001` |
+| GET | `/user/coupons?status=&orderAmount=&shopId=` | 我的券：`{id,couponId,title,threshold,amount,shopId,status,expireAt,usedAt,usable}`；传了 `orderAmount` 与 `shopId` 才回 `usable`（金额够 + 店铺适用 + 未用 + 未过期） |
+
+`status` 取 `UNUSED` / `USED` / `EXPIRED`。券模板表 `coupon_template` 存面额、门槛、适用店铺与发放数量；
+用户券表 `user_coupon` 存一张张实券，`(user_id, template_id)` 上有一个「仅对 UNUSED 生效」的唯一约束，
+靠数据库保证同一种券手上不会有两张未用的。演示种子四张券：满 20 减 3、满 40 减 6、
+川味小馆满 40 减 5（单店券）、新客立减 2（无门槛）。
+
+**下单用券的五条校验**（任一不满足都返回 400 + `code: 4001` + 中文提示）：
+
+1. 券属于当前账号、状态 `UNUSED`、未过期；
+2. 券绑了店铺时只能用在对应店铺；
+3. 菜品金额达到券门槛（门槛按菜品金额算，不含配送费）；
+4. 抵扣不超过菜品小计，配送费不参与抵扣；
+5. 下单成功后券置 `USED` 并记录 `usedAt`；核销时对该券 `SELECT ... FOR UPDATE`，
+   整个下单在一个事务里，并发下同一张券只能用一次。
+
+**骑手收入与提现**
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | `/rider/weather` | `{city,condition,icon,temperature,feelsLike,wind,humidity,tomorrow,subsidy:{active,amount,reason},updateTime}` |
+| GET | `/rider/wallet` | `{balance,totalIncome,baseIncome,todayIncome,todaySubsidy,subsidyPer,withdrawn,basePrice,records:[{id,amount,channel,status,createdAt}]}` |
+| POST | `/rider/withdraw` | 入参 `{amount,channel}`；`1 ≤ amount ≤ balance`，成功后余额扣减并追加一条记录 |
+
+- 收入口径唯一：`收入 = 完成单数 × 5 + 当日完成单数 × 天气补贴`；
+  `可提现余额 = 累计收入 − 已提现`。`/rider/stats` 与 `/rider/wallet` 都调同一份计算，不会出现两套数字。
+- `完成单数` 按数据库里 `status = DONE` 且 `rider_id` 为该骑手的订单实时统计（不复用 `sys_user.total_done` 的展示字段），
+  所以每笔收入都能在订单里对回去。
+- 天气补贴按时段给：夜间（21:00–05:00）+2、早高峰（07:00–09:00）+1.5，其余时段 0；
+  雨天 +2 的规则已预留，但演示环境没有外部天气源，`condition` 目前是固定的「晴」，等接入真实天气后把 `rainy` 换成实况即可。
+- 提现前会锁住骑手那一行再算余额，避免并发提现把余额提成负数；`wallet_record` 存提现流水。
+
 ---
 
 ## 四、已知差异（联调时逐条登记）
@@ -354,5 +399,10 @@ interface Rider {
 | 2026-11-13 | `/admin/shop` | 新增接口，原 49 条契约里没有 | 需要新增「店铺设置」页面 | 前端待做 |
 | 2026-11-13 | `/auth/admin/login`、`/auth/user/login` | 旧的三入口仍在；其中 `/user/login` 错误密码返回 401 而不是 2001 | 前端只用单入口 `/auth/login`，不影响 | — |
 | 2026-11-13 | 时间格式 | 已是 `yyyy-MM-dd HH:mm:ss`（`JacksonConfig` 统一序列化） | iOS Safari 用 `new Date('2026-11-13 19:41:22')` 会 Invalid Date，需先 `replace(' ', 'T')` 或用 dayjs | 前端注意 |
+| 2026-11-13 | `/user/menu` | 新增 `combos`（在售套餐，含 `originPrice`、`dishCount`、`dishNames`、`image`、`description`） | 菜单页可以加「团购套餐」区块 | 前端可选接入 |
+| 2026-11-13 | `POST /user/order` | 下单支持 `couponId`，券与店铺满减可叠加；订单回填 `couponId/couponTitle/couponAmount` | 结算页可用 `coupons.available()` 列出可用券 | 前端可选接入 |
+| 2026-11-13 | `POST /user/order` 的 `items` | 暂只接受 `dishId`，**不支持 `comboId` 下单**（套餐入单要改 `order_item` 结构与金额拆分） | 套餐目前只能在菜单展示，点击下单走单品 | 后端下一轮做 |
+| 2026-11-13 | `/rider/weather` | 城市、天气、温湿度是演示固定值（没有接外部天气源），只有补贴金额按时段真算 | 页面按返回展示，不要在页面里写死金额 | — |
+| 2026-11-13 | `/rider/stats`、`/rider/wallet` | `完成单数` 用真实 `DONE` 订单统计，与 `sys_user.total_done`（种子里的历史展示值 68）不是同一口径 | 工作台「累计完成」看 `totalDone`，收入相关看 `wallet` | — |
 
 > 规则：**优先后端改**（他只有一个消费者）；后端确实不改的，前端在 adapter 里折中，并在此登记一行。

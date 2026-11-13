@@ -5,10 +5,12 @@ import com.dandanyun.common.PageResult;
 import com.dandanyun.common.Result;
 import com.dandanyun.order.OrderService;
 import com.dandanyun.system.RiderService;
+import com.dandanyun.system.RiderWithdrawRequest;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -75,5 +77,24 @@ public class RiderPortalController {
     @PostMapping("/orders/{orderId}/finish")
     public Result<Map<String, Object>> finish(@PathVariable Long orderId) {
         return Result.ok(orderService.riderFinish(AuthContext.requireRider().id(), orderId));
+    }
+
+    @GetMapping("/weather")
+    public Result<Map<String, Object>> weather() {
+        return Result.ok(riderService.weather(AuthContext.requireRider().id()));
+    }
+
+    @GetMapping("/wallet")
+    public Result<Map<String, Object>> wallet() {
+        return Result.ok(riderService.wallet(AuthContext.requireRider().id()));
+    }
+
+    @PostMapping("/withdraw")
+    public Result<Map<String, Object>> withdraw(@RequestBody RiderWithdrawRequest request) {
+        Long riderId = AuthContext.requireRider().id();
+        if (request == null) {
+            return Result.ok(riderService.wallet(riderId));
+        }
+        return Result.ok(riderService.withdraw(riderId, request.amount(), request.channel()));
     }
 }

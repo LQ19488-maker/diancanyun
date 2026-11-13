@@ -151,6 +151,9 @@ CREATE TABLE IF NOT EXISTS orders (
     delivery_fee DECIMAL(10, 2) NOT NULL DEFAULT 0,
     pack_fee DECIMAL(10, 2) NOT NULL DEFAULT 0,
     discount DECIMAL(10, 2) NOT NULL DEFAULT 0 COMMENT '满减优惠金额',
+    coupon_id BIGINT NULL COMMENT '使用的优惠券',
+    coupon_title VARCHAR(64) NOT NULL DEFAULT '' COMMENT '优惠券名称快照',
+    coupon_amount DECIMAL(10, 2) NOT NULL DEFAULT 0 COMMENT '优惠券抵扣金额',
     total_amount DECIMAL(10, 2) NOT NULL DEFAULT 0,
     remark VARCHAR(255) NOT NULL DEFAULT '',
     pay_status VARCHAR(16) NOT NULL DEFAULT 'PAID',
@@ -189,3 +192,57 @@ CREATE TABLE IF NOT EXISTS order_timeline (
     KEY idx_order_timeline_order (order_id, created_at),
     CONSTRAINT fk_order_timeline_order FOREIGN KEY (order_id) REFERENCES orders (id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE IF NOT EXISTS coupon_template (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    title VARCHAR(64) NOT NULL,
+    threshold DECIMAL(10, 2) NOT NULL DEFAULT 0 COMMENT '可用门槛，按菜品金额判断',
+    amount DECIMAL(10, 2) NOT NULL COMMENT '抵扣金额',
+    shop_id BIGINT NULL COMMENT '为空表示全平台通用',
+    description VARCHAR(255) NOT NULL DEFAULT '',
+    total INT NOT NULL DEFAULT 0 COMMENT '发放总量',
+    expire_days INT NOT NULL DEFAULT 30 COMMENT '领取后有效天数',
+    status TINYINT NOT NULL DEFAULT 1,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    KEY idx_coupon_template_status (status, amount),
+    CONSTRAINT chk_coupon_template_amount CHECK (amount > 0),
+    CONSTRAINT chk_coupon_template_threshold CHECK (threshold >= 0),
+    CONSTRAINT chk_coupon_template_status CHECK (status IN (0, 1)),
+    CONSTRAINT fk_coupon_template_shop FOREIGN KEY (shop_id) REFERENCES shop (id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE IF NOT EXISTS user_coupon (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    user_id BIGINT NOT NULL,
+    template_id BIGINT NOT NULL,
+    title VARCHAR(64) NOT NULL,
+    threshold DECIMAL(10, 2) NOT NULL DEFAULT 0,
+    amount DECIMAL(10, 2) NOT NULL,
+    shop_id BIGINT NULL,
+    status VARCHAR(16) NOT NULL DEFAULT 'UNUSED',
+    order_id BIGINT NULL,
+    claimed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    expire_at DATETIME NOT NULL,
+    used_at DATETIME NULL,
+    active_flag TINYINT GENERATED ALWAYS AS (CASE WHEN status = 'UNUSED' THEN 1 ELSE NULL END) STORED,
+    UNIQUE KEY uk_user_coupon_active (user_id, template_id, active_flag),
+    KEY idx_user_coupon_user_status (user_id, status, expire_at),
+    CONSTRAINT chk_user_coupon_status CHECK (status IN ('UNUSED', 'USED', 'EXPIRED')),
+    CONSTRAINT fk_user_coupon_template FOREIGN KEY (template_id) REFERENCES coupon_template (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE IF NOT EXISTS wallet_record (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    rider_id BIGINT NOT NULL,
+    type VARCHAR(16) NOT NULL DEFAULT 'WITHDRAW',
+    amount DECIMAL(10, 2) NOT NULL,
+    channel VARCHAR(32) NOT NULL DEFAULT '',
+    status VARCHAR(16) NOT NULL DEFAULT 'DONE',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    KEY idx_wallet_rider_time (rider_id, created_at),
+    CONSTRAINT chk_wallet_amount CHECK (amount > 0),
+    CONSTRAINT chk_wallet_type CHECK (type IN ('WITHDRAW')),
+    CONSTRAINT chk_wallet_status CHECK (status IN ('DONE', 'FAILED'))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+

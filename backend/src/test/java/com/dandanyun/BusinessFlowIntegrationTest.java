@@ -19,6 +19,7 @@ import tools.jackson.databind.ObjectMapper;
 import java.nio.charset.StandardCharsets;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -284,6 +285,177 @@ class BusinessFlowIntegrationTest {
         assertEquals("DONE", order.path("status").asText());
         assertEquals("王小明", order.path("riderName").asText());
         assertEquals(4, order.path("timeline").size(), "应有 PENDING/ACCEPTED/DELIVERING/DONE 四条轨迹");
+    }
+
+    @Test
+    @Order(11)
+    void couponCenterListsTemplatesAndRejectsDuplicateClaim() throws Exception {
+        String customer = login("customer", "customer1234");
+
+        var templates = body(mockMvc.perform(get("/user/coupon/templates")
+                        .header("Authorization", bearer(customer)))
+                .andExpect(status().isOk())
+                .andReturn()).path("data").path("records");
+        assertTrue(templates.size() >= 4, "种子应有四张券模板");
+        var first = templates.get(0);
+        assertTrue(first.path("id").isTextual(), "券模板主键必须序列化成字符串");
+        assertTrue(first.path("amount").isNumber(), "券面金额必须是数字");
+        assertTrue(first.path("left").isNumber());
+        assertTrue(first.path("claimed").isBoolean());
+        assertFalse(first.path("claimed").asBoolean());
+
+        var claimed = body(mockMvc.perform(post("/user/coupon/7101/claim")
+                        .header("Authorization", bearer(customer)))
+                .andExpect(status().isOk())
+                .andReturn()).path("data");
+        assertTrue(claimed.path("id").isTextual());
+        assertEquals("UNUSED", claimed.path("status").asText());
+        assertEquals(7101.0, claimed.path("couponId").asDouble());
+        assertTrue(claimed.path("expireAt").asText().matches("\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}"),
+                "券有效期必须使用契约时间格式");
+
+        mockMvc.perform(post("/user/coupon/7101/claim").header("Authorization", bearer(customer)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(4001))
+                .andExpect(jsonPath("$.message").value("这张券已经领过了，先用掉手上的再来"));
+
+        var mine = body(mockMvc.perform(get("/user/coupons")
+                        .param("orderAmount", "38")
+                        .param("shopId", "10001")
+                        .header("Authorization", bearer(customer)))
+                .andExpect(status().isOk())
+                .andReturn()).path("data").path("records");
+        assertTrue(mine.size() >= 1);
+        assertTrue(mine.get(0).path("usable").isBoolean(), "传金额与店铺时应返回 usable");
+        assertTrue(mine.get(0).path("usable").asBoolean(), "38 元在 10001 应可用满 20 减 3");
+    }
+
+    @Test
+    @Order(12)
+    void orderConsumesCouponOnceAndRejectsReuse() throws Exception {
+        String customer = login("customer", "customer1234");
+
+        var claimed = body(mockMvc.perform(post("/user/coupon/7104/claim")
+                        .header("Authorization", bearer(customer)))
+                .andExpect(status().isOk())
+                .andReturn()).path("data");
+        long couponId = Long.parseLong(claimed.path("id").asText());
+
+        // 柠檬水 2 杯 20 元、未达满减门槛、券为无门槛立减 2
+        String payload = "{\"shopId\":10001,\"addressId\":11001,\"couponId\":" + couponId + ","
+                + "\"items\":[{\"dishId\":3006,\"quantity\":2}]}";
+        var order = body(mockMvc.perform(post("/user/order")
+                        .header("Authorization", bearer(customer))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(payload))
+                .andExpect(status().isOk())
+                .andReturn()).path("data");
+        assertEquals(20.0, order.path("amount").asDouble());
+        assertEquals(0.0, order.path("discount").asDouble());
+        assertEquals(2.0, order.path("couponAmount").asDouble(), "无门槛券应抵 2 元");
+        assertEquals("新客立减 2 元", order.path("couponTitle").asText());
+        assertEquals(23.0, order.path("totalAmount").asDouble(), "20 - 0 - 2 + 0 + 5 = 23");
+        assertTrue(order.path("couponId").isTextual(), "订单里的券编号也应是字符串");
+
+        mockMvc.perform(post("/user/order")
+                        .header("Authorization", bearer(customer))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(payload))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(4001))
+                .andExpect(jsonPath("$.message").value("这张优惠券已经用掉了"));
+
+        // 单店券不能用在别家店
+        var shopCoupon = body(mockMvc.perform(post("/user/coupon/7103/claim")
+                        .header("Authorization", bearer(customer)))
+                .andExpect(status().isOk())
+                .andReturn()).path("data");
+        mockMvc.perform(post("/user/order")
+                        .header("Authorization", bearer(customer))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"shopId\":10002,\"addressId\":11001,\"couponId\":"
+                                + shopCoupon.path("id").asText()
+                                + ",\"items\":[{\"dishId\":3005,\"quantity\":1}]}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(4001))
+                .andExpect(jsonPath("$.message").value("这张优惠券只能在下单店铺使用"));
+    }
+
+    @Test
+    @Order(13)
+    void menuReturnsCombosForTheShop() throws Exception {
+        String customer = login("customer", "customer1234");
+        var combos = body(mockMvc.perform(get("/user/menu").param("shopId", "10001")
+                        .header("Authorization", bearer(customer)))
+                .andExpect(status().isOk())
+                .andReturn()).path("data").path("combos");
+        assertTrue(combos.size() >= 2, "川味小馆应有两个在售套餐");
+        var combo = combos.get(0);
+        assertTrue(combo.path("id").isTextual());
+        assertEquals(38.0, combo.path("price").asDouble());
+        assertEquals(50.0, combo.path("originPrice").asDouble(), "原价应为所含菜品单价之和");
+        assertEquals(3, combo.path("dishCount").asInt());
+        assertTrue(combo.path("dishNames").isArray(), "dishNames 应是数组");
+        assertEquals("宫保鸡丁", combo.path("dishNames").get(0).asText());
+    }
+
+    @Test
+    @Order(14)
+    void riderWalletFollowsOneFormulaAndWithdrawChecksBalance() throws Exception {
+        String rider = login("rider", "rider1234");
+
+        var weather = body(mockMvc.perform(get("/rider/weather").header("Authorization", bearer(rider)))
+                .andExpect(status().isOk())
+                .andReturn()).path("data");
+        assertTrue(weather.path("city").isTextual());
+        assertTrue(weather.path("subsidy").path("active").isBoolean());
+        assertTrue(weather.path("subsidy").path("amount").isNumber(), "补贴金额必须是数字");
+        assertTrue(weather.path("updateTime").asText().matches("\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}"));
+
+        var wallet = body(mockMvc.perform(get("/rider/wallet").header("Authorization", bearer(rider)))
+                .andExpect(status().isOk())
+                .andReturn()).path("data");
+        assertEquals(5.0, wallet.path("basePrice").asDouble(), "基础配送费固定 5 元");
+        assertTrue(wallet.path("totalIncome").asDouble() == wallet.path("baseIncome").asDouble()
+                + wallet.path("todaySubsidy").asDouble(), "收入 = 完成单数×5 + 当日单数×补贴");
+        assertTrue(wallet.path("balance").asDouble() == wallet.path("totalIncome").asDouble()
+                - wallet.path("withdrawn").asDouble(), "余额 = 累计收入 − 已提现");
+
+        // 工作台卡片与钱包必须读同一套数字
+        var stats = body(mockMvc.perform(get("/rider/stats").header("Authorization", bearer(rider)))
+                .andExpect(status().isOk())
+                .andReturn()).path("data");
+        assertTrue(stats.path("income").asDouble() == wallet.path("totalIncome").asDouble(),
+                "stats.income 与钱包 totalIncome 必须一致");
+        assertTrue(stats.path("balance").asDouble() == wallet.path("balance").asDouble(),
+                "stats.balance 与钱包 balance 必须一致");
+
+        double before = wallet.path("balance").asDouble();
+        var after = body(mockMvc.perform(post("/rider/withdraw")
+                        .header("Authorization", bearer(rider))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"amount\":1,\"channel\":\"微信\"}"))
+                .andExpect(status().isOk())
+                .andReturn()).path("data");
+        assertEquals(before - 1.0, after.path("balance").asDouble(), 0.001, "提现后余额应减少对应金额");
+        assertTrue(after.path("records").size() >= 1);
+        assertEquals("微信", after.path("records").get(0).path("channel").asText());
+        assertEquals(1.0, after.path("records").get(0).path("amount").asDouble());
+        assertTrue(after.path("records").get(0).path("createdAt").isTextual());
+
+        mockMvc.perform(post("/rider/withdraw")
+                        .header("Authorization", bearer(rider))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"amount\":9999,\"channel\":\"微信\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(4001));
+
+        mockMvc.perform(post("/rider/withdraw")
+                        .header("Authorization", bearer(rider))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"amount\":0.5,\"channel\":\"微信\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(1001));
     }
 
     private String login(String username, String password) throws Exception {

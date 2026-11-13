@@ -67,7 +67,8 @@ class ApiContractRoutesTest {
                 "POST /admin/upload",
                 "GET /admin/shop",
                 "PUT /admin/shop",
-                "GET /user/shops",                "GET /user/shop/{id}",
+                "GET /user/shops",
+                "GET /user/shop/{id}",
                 "GET /user/menu",
                 "GET /user/addresses",
                 "POST /user/address",
@@ -77,13 +78,19 @@ class ApiContractRoutesTest {
                 "POST /user/order",
                 "GET /user/order/{id}",
                 "GET /user/orders",
+                "GET /user/coupon/templates",
+                "POST /user/coupon/{id}/claim",
+                "GET /user/coupons",
                 "GET /rider/me",
                 "GET /rider/stats",
                 "PUT /rider/online",
                 "GET /rider/tasks",
                 "POST /rider/tasks/{orderId}/grab",
                 "GET /rider/orders",
-                "POST /rider/orders/{orderId}/finish"
+                "POST /rider/orders/{orderId}/finish",
+                "GET /rider/weather",
+                "GET /rider/wallet",
+                "POST /rider/withdraw"
         );
 
         Set<String> missing = new HashSet<>(expected);

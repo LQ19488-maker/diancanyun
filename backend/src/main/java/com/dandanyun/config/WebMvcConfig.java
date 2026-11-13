@@ -52,7 +52,9 @@ public class WebMvcConfig implements WebMvcConfigurer {
                         "/user/order",
                         "/user/order/**",
                         "/user/addresses",
-                        "/user/address/**"
+                        "/user/address/**",
+                        "/user/coupons",
+                        "/user/coupon/**"
                 )
                 .excludePathPatterns("/admin/login");
     }

@@ -5,6 +5,7 @@ import java.util.List;
 public record H5OrderRequest(
         Long shopId,
         Long addressId,
+        Long couponId,
         String tableNo,
         String remark,
         List<Item> items

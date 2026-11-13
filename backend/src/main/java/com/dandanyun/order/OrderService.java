@@ -2,6 +2,7 @@ package com.dandanyun.order;
 
 import com.dandanyun.common.BusinessException;
 import com.dandanyun.common.PageResult;
+import com.dandanyun.coupon.CouponService;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
@@ -39,10 +40,12 @@ public class OrderService {
 
     private final NamedParameterJdbcTemplate jdbc;
     private final ObjectMapper objectMapper;
+    private final CouponService couponService;
 
-    public OrderService(NamedParameterJdbcTemplate jdbc, ObjectMapper objectMapper) {
+    public OrderService(NamedParameterJdbcTemplate jdbc, ObjectMapper objectMapper, CouponService couponService) {
         this.jdbc = jdbc;
         this.objectMapper = objectMapper;
+        this.couponService = couponService;
     }
 
     public Map<String, Object> menu(Long shopId) {
@@ -99,11 +102,48 @@ public class OrderService {
                     return row;
                 }
         );
+        // 团购套餐：原价按所含菜品单价累加，供前端展示「省多少」
+        List<Map<String, Object>> combos = jdbc.query(
+                "SELECT cb.id, cb.name, cb.price, cb.image, cb.description, "
+                        + "(SELECT COALESCE(SUM(d.price), 0) FROM combo_dish cd "
+                        + "  JOIN dish d ON d.id = cd.dish_id WHERE cd.combo_id = cb.id) AS origin_price, "
+                        + "(SELECT COUNT(*) FROM combo_dish cd WHERE cd.combo_id = cb.id) AS dish_count, "
+                        + "(SELECT GROUP_CONCAT(d.name ORDER BY cd.sort_no SEPARATOR '/') FROM combo_dish cd "
+                        + "  JOIN dish d ON d.id = cd.dish_id WHERE cd.combo_id = cb.id) AS dish_names "
+                        + "FROM combo cb WHERE cb.shop_id = :shopId AND cb.status = 1 ORDER BY cb.id",
+                params,
+                (rs, rowNum) -> {
+                    Map<String, Object> row = new LinkedHashMap<>();
+                    row.put("id", rs.getLong("id"));
+                    row.put("name", rs.getString("name"));
+                    row.put("price", rs.getBigDecimal("price"));
+                    row.put("originPrice", rs.getBigDecimal("origin_price"));
+                    row.put("dishCount", rs.getInt("dish_count"));
+                    row.put("dishNames", splitNames(rs.getString("dish_names")));
+                    row.put("image", rs.getString("image"));
+                    row.put("description", rs.getString("description"));
+                    return row;
+                }
+        );
         return Map.of(
                 "shop", shopMap(shop),
                 "categories", categories,
-                "dishes", dishes
+                "dishes", dishes,
+                "combos", combos
         );
+    }
+
+    private static List<String> splitNames(String joined) {
+        List<String> names = new ArrayList<>();
+        if (joined == null || joined.isBlank()) {
+            return names;
+        }
+        for (String name : joined.split("/")) {
+            if (!name.isBlank()) {
+                names.add(name);
+            }
+        }
+        return names;
     }
 
     @Transactional
@@ -192,8 +232,21 @@ public class OrderService {
                 && amount.compareTo(fullAmount) >= 0) {
             discount = reduceAmount.min(amount).setScale(2, RoundingMode.HALF_UP);
         }
-        BigDecimal totalAmount = amount.subtract(discount).add(packFee).add(deliveryFee)
+        // 优惠券在满减之后抵扣，只抵菜品金额，配送费不参与
+        BigDecimal couponAmount = BigDecimal.ZERO;
+        String couponTitle = "";
+        if (request.couponId() != null) {
+            Map<String, Object> coupon = couponService.consume(
+                    customerId, request.couponId(), request.shopId(), amount);
+            couponTitle = String.valueOf(coupon.get("title"));
+            BigDecimal faceValue = (BigDecimal) coupon.get("amount");
+            couponAmount = faceValue.min(amount).setScale(2, RoundingMode.HALF_UP);
+        }
+        BigDecimal totalAmount = amount.subtract(discount).subtract(couponAmount).add(packFee).add(deliveryFee)
                 .setScale(2, RoundingMode.HALF_UP);
+        if (totalAmount.signum() < 0) {
+            totalAmount = BigDecimal.ZERO;
+        }
         LocalDateTime now = LocalDateTime.now();
         String orderNo = "DC" + now.format(DateTimeFormatter.ofPattern("yyMMddHHmmss"))
                 + String.format("%03d", ThreadLocalRandom.current().nextInt(1000));
@@ -201,10 +254,12 @@ public class OrderService {
         jdbc.update(
                 "INSERT INTO orders(order_no, user_name, phone, customer_id, shop_id, shop_name, "
                         + "address, address_name, address_phone, address_detail, address_tag, "
-                        + "amount, delivery_fee, pack_fee, discount, total_amount, remark, pay_status, status, "
+                        + "amount, delivery_fee, pack_fee, discount, coupon_id, coupon_title, coupon_amount, "
+                        + "total_amount, remark, pay_status, status, "
                         + "created_at, updated_at) VALUES(:orderNo, :userName, :phone, :customerId, "
                         + ":shopId, :shopName, :address, :addressName, :addressPhone, :addressDetail, "
-                        + ":addressTag, :amount, :deliveryFee, :packFee, :discount, :totalAmount, :remark, 'PAID', "
+                        + ":addressTag, :amount, :deliveryFee, :packFee, :discount, :couponId, "
+                        + ":couponTitle, :couponAmount, :totalAmount, :remark, 'PAID', "
                         + "'PENDING', :createdAt, :createdAt)",
                 new MapSqlParameterSource()
                         .addValue("orderNo", orderNo)
@@ -222,6 +277,9 @@ public class OrderService {
                         .addValue("deliveryFee", deliveryFee)
                         .addValue("packFee", packFee)
                         .addValue("discount", discount)
+                        .addValue("couponId", request.couponId())
+                        .addValue("couponTitle", couponTitle)
+                        .addValue("couponAmount", couponAmount)
                         .addValue("totalAmount", totalAmount)
                         .addValue("remark", blankToEmpty(request.remark()))
                         .addValue("createdAt", now),
@@ -244,6 +302,7 @@ public class OrderService {
             );
         }
         addTimeline(orderId, "PENDING", now);
+        couponService.bindOrder(request.couponId(), orderId);
         return find(orderId);
     }
 
@@ -433,7 +492,8 @@ public class OrderService {
         List<Map<String, Object>> rows = jdbc.query(
                 "SELECT id, order_no, user_name, phone, customer_id, shop_id, shop_name, table_no, "
                         + "address, address_name, address_phone, address_detail, address_tag, "
-                        + "amount, delivery_fee, pack_fee, discount, total_amount, remark, pay_status, status, "
+                        + "amount, delivery_fee, pack_fee, discount, coupon_id, coupon_title, coupon_amount, "
+                        + "total_amount, remark, pay_status, status, "
                         + "rider_id, rider_name, rider_phone, created_at FROM orders WHERE id = :id",
                 Map.of("id", id),
                 (rs, rowNum) -> {
@@ -457,6 +517,9 @@ public class OrderService {
                     row.put("deliveryFee", rs.getBigDecimal("delivery_fee"));
                     row.put("packFee", rs.getBigDecimal("pack_fee"));
                     row.put("discount", rs.getBigDecimal("discount"));
+                    row.put("couponId", rs.getObject("coupon_id"));
+                    row.put("couponTitle", rs.getString("coupon_title"));
+                    row.put("couponAmount", rs.getBigDecimal("coupon_amount"));
                     row.put("totalAmount", rs.getBigDecimal("total_amount"));
                     row.put("remark", rs.getString("remark"));
                     row.put("payStatus", rs.getString("pay_status"));

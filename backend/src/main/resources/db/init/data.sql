@@ -165,8 +165,7 @@ VALUES
 
 INSERT IGNORE INTO order_timeline (id, order_id, status, created_at)
 VALUES
-    (7001, 5001, 'PENDING', DATE_SUB(NOW(), INTERVAL 20 MINUTE)),
-    (7002, 5002, 'PENDING', DATE_SUB(NOW(), INTERVAL 40 MINUTE)),
+    (7001, 5001, 'PENDING', DATE_SUB(NOW(), INTERVAL 20 MINUTE)),    (7002, 5002, 'PENDING', DATE_SUB(NOW(), INTERVAL 40 MINUTE)),
     (7003, 5002, 'ACCEPTED', DATE_SUB(NOW(), INTERVAL 30 MINUTE)),
     (7004, 5003, 'PENDING', DATE_SUB(NOW(), INTERVAL 2 HOUR)),
     (7005, 5003, 'ACCEPTED', DATE_SUB(NOW(), INTERVAL 90 MINUTE)),
@@ -176,4 +175,36 @@ VALUES
     (7009, 5004, 'DELIVERING', DATE_SUB(NOW(), INTERVAL 22 HOUR)),
     (7010, 5004, 'DONE', DATE_SUB(NOW(), INTERVAL 20 HOUR)),
     (7011, 5005, 'PENDING', DATE_SUB(NOW(), INTERVAL 2 DAY)),
-    (7012, 5005, 'CANCELED', DATE_SUB(NOW(), INTERVAL 40 HOUR));
+    (7012, 5005, 'CANCELED', DATE_SUB(NOW(), INTERVAL 40 HOUR)),
+    (7013, 5006, 'PENDING', DATE_SUB(NOW(), INTERVAL 3 HOUR)),
+    (7014, 5006, 'ACCEPTED', DATE_SUB(NOW(), INTERVAL 170 MINUTE)),
+    (7015, 5006, 'DELIVERING', DATE_SUB(NOW(), INTERVAL 150 MINUTE)),
+    (7016, 5006, 'DONE', DATE_SUB(NOW(), INTERVAL 2 HOUR));
+
+-- 今天完成的一单，用于骑手钱包与天气补贴的演示口径
+INSERT IGNORE INTO orders
+    (id, order_no, user_name, phone, customer_id, shop_id, shop_name, table_no,
+     address, address_name, address_phone, address_detail, address_tag,
+     amount, delivery_fee, pack_fee, discount, total_amount, remark, pay_status, status,
+     rider_id, rider_name, rider_phone, created_at, updated_at)
+VALUES
+    (5006, 'DC-DEMO-5006', '胡粤毫', '13800001004', 1004, 10001, '川味小馆', '',
+     '北京市海淀区知春路 8 号', '胡粤毫', '13800001004',
+     '北京市海淀区知春路 8 号 2 栋 501', '家',
+     32.00, 5.00, 0.00, 5.00, 32.00, '', 'PAID', 'DONE',
+     1002, '王小明', '13800001002', DATE_SUB(NOW(), INTERVAL 3 HOUR), DATE_SUB(NOW(), INTERVAL 2 HOUR));
+
+INSERT IGNORE INTO order_item
+    (id, order_id, dish_id, dish_name, quantity, unit_price, amount, flavors_json)
+VALUES
+    (6008, 5006, 3002, '鱼香肉丝', 1, 32.00, 32.00, '["辣度:微辣"]');
+
+-- 领券中心的四张券：全平台两张、单店一张、无门槛一张
+INSERT IGNORE INTO coupon_template
+    (id, title, threshold, amount, shop_id, description, total, expire_days, status)
+VALUES
+    (7101, '全场满 20 减 3', 20.00, 3.00, NULL, '全平台通用，菜品满 20 元可用', 200, 30, 1),
+    (7102, '全场满 40 减 6', 40.00, 6.00, NULL, '全平台通用，菜品满 40 元可用', 100, 30, 1),
+    (7103, '川味小馆满 40 减 5', 40.00, 5.00, 10001, '仅限川味小馆使用', 50, 15, 1),
+    (7104, '新客立减 2 元', 0.00, 2.00, NULL, '无门槛，新用户专享', 500, 7, 1);
+

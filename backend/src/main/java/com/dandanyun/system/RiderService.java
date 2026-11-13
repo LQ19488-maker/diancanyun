@@ -12,8 +12,12 @@ import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -22,6 +26,11 @@ import java.util.Map;
 public class RiderService {
 
     private static final String DEFAULT_PASSWORD = "rider123456";
+    /** 基础配送费：骑手收入口径里唯一的价格基准 */
+    private static final BigDecimal BASE_DELIVERY_PRICE = new BigDecimal("5.00");
+    private static final BigDecimal SUBSIDY_RAIN = new BigDecimal("2.00");
+    private static final BigDecimal SUBSIDY_NIGHT = new BigDecimal("2.00");
+    private static final BigDecimal SUBSIDY_MORNING_PEAK = new BigDecimal("1.50");
 
     private final NamedParameterJdbcTemplate jdbc;
     private final PasswordService passwordService;
@@ -199,27 +208,194 @@ public class RiderService {
                 Map.of(),
                 Integer.class
         );
-        Integer todayDone = jdbc.queryForObject(
-                "SELECT COUNT(*) FROM orders WHERE rider_id = :id AND status = 'DONE' "
-                        + "AND DATE(updated_at) = CURRENT_DATE",
-                Map.of("id", id),
-                Integer.class
-        );
-        java.math.BigDecimal income = jdbc.queryForObject(
-                "SELECT COALESCE(SUM(delivery_fee), 0) FROM orders "
-                        + "WHERE rider_id = :id AND status = 'DONE'",
-                Map.of("id", id),
-                java.math.BigDecimal.class
-        );
+        int todayDone = doneToday(id);
+        BigDecimal baseIncome = BASE_DELIVERY_PRICE.multiply(BigDecimal.valueOf((long) doneTotal(id)))
+                .setScale(2, RoundingMode.HALF_UP);
+        BigDecimal subsidyPer = subsidyPer();
+        BigDecimal todaySubsidy = subsidyPer.multiply(BigDecimal.valueOf((long) todayDone))
+                .setScale(2, RoundingMode.HALF_UP);
+        BigDecimal totalIncome = baseIncome.add(todaySubsidy).setScale(2, RoundingMode.HALF_UP);
+        BigDecimal balance = totalIncome.subtract(withdrawnTotal(id)).setScale(2, RoundingMode.HALF_UP);
         Map<String, Object> stats = new LinkedHashMap<>();
         stats.put("online", rider.get("online"));
-        stats.put("todayDone", todayDone == null ? 0 : todayDone);
+        stats.put("todayDone", todayDone);
         stats.put("onTheWay", rider.get("onTheWay"));
         stats.put("rating", rider.get("rating"));
         stats.put("totalDone", rider.get("totalDone"));
-        stats.put("income", income);
+        stats.put("income", totalIncome);
+        stats.put("baseIncome", baseIncome);
+        stats.put("todaySubsidy", todaySubsidy);
+        stats.put("subsidyPer", subsidyPer);
+        stats.put("balance", balance);
         stats.put("availableTasks", availableTasks);
         return stats;
+    }
+
+    /**
+     * 钱包：收入 = 完成单数 × 基础配送费 + 当日完成单数 × 天气补贴；
+     * 可提现余额 = 累计收入 − 已提现。工作台卡片、钱包页、提现校验都读这一份数据。
+     */
+    public Map<String, Object> wallet(Long riderId) {
+        int doneTotal = doneTotal(riderId);
+        int todayDone = doneToday(riderId);
+        BigDecimal baseIncome = BASE_DELIVERY_PRICE.multiply(BigDecimal.valueOf((long) doneTotal))
+                .setScale(2, RoundingMode.HALF_UP);
+        BigDecimal todayBase = BASE_DELIVERY_PRICE.multiply(BigDecimal.valueOf((long) todayDone))
+                .setScale(2, RoundingMode.HALF_UP);
+        BigDecimal subsidyPer = subsidyPer();
+        BigDecimal todaySubsidy = subsidyPer.multiply(BigDecimal.valueOf((long) todayDone))
+                .setScale(2, RoundingMode.HALF_UP);
+        BigDecimal totalIncome = baseIncome.add(todaySubsidy).setScale(2, RoundingMode.HALF_UP);
+        BigDecimal todayIncome = todayBase.add(todaySubsidy).setScale(2, RoundingMode.HALF_UP);
+        BigDecimal withdrawn = withdrawnTotal(riderId);
+        BigDecimal balance = totalIncome.subtract(withdrawn).setScale(2, RoundingMode.HALF_UP);
+        Map<String, Object> wallet = new LinkedHashMap<>();
+        wallet.put("balance", balance);
+        wallet.put("totalIncome", totalIncome);
+        wallet.put("baseIncome", baseIncome);
+        wallet.put("todayIncome", todayIncome);
+        wallet.put("todaySubsidy", todaySubsidy);
+        wallet.put("subsidyPer", subsidyPer);
+        wallet.put("withdrawn", withdrawn);
+        wallet.put("basePrice", BASE_DELIVERY_PRICE);
+        wallet.put("records", withdrawRecords(riderId));
+        return wallet;
+    }
+
+    /**
+     * 天气：演示环境没有外部天气源，这里返回固定的城市与天气，补贴只按时段计算
+     * （早高峰 1.5 元、夜间 2 元）。雨天补贴规则保留，接入真实天气后把 rainy 换成实况即可。
+     */
+    public Map<String, Object> weather(Long riderId) {
+        Map<String, Object> rider = find(riderId);
+        int hour = LocalTime.now().getHour();
+        boolean rainy = false;
+        BigDecimal amount = BigDecimal.ZERO;
+        String reason = "当前时段没有补贴";
+        if (rainy) {
+            amount = SUBSIDY_RAIN;
+            reason = "雨天配送补贴";
+        } else if (hour >= 21 || hour < 5) {
+            amount = SUBSIDY_NIGHT;
+            reason = "夜间配送补贴（21:00–05:00）";
+        } else if (hour >= 7 && hour < 9) {
+            amount = SUBSIDY_MORNING_PEAK;
+            reason = "早高峰补贴（07:00–09:00）";
+        }
+        Map<String, Object> subsidy = new LinkedHashMap<>();
+        subsidy.put("active", amount.signum() > 0);
+        subsidy.put("amount", amount);
+        subsidy.put("reason", reason);
+        Map<String, Object> weather = new LinkedHashMap<>();
+        weather.put("city", "北京");
+        weather.put("condition", rainy ? "小雨" : "晴");
+        weather.put("icon", rainy ? "rain" : "sunny");
+        weather.put("temperature", rainy ? 15 : 18);
+        weather.put("feelsLike", rainy ? 14 : 17);
+        weather.put("wind", "东南风 2 级");
+        weather.put("humidity", rainy ? 82 : 46);
+        weather.put("tomorrow", rainy ? "阴 12~19℃" : "多云 12~20℃");
+        weather.put("subsidy", subsidy);
+        weather.put("updateTime", LocalDateTime.now().withSecond(0).withNano(0));
+        weather.put("area", rider.get("area"));
+        return weather;
+    }
+
+    /** 提现：校验 1 ≤ 金额 ≤ 可提现余额，成功后余额扣减并留一条记录 */
+    @Transactional
+    public Map<String, Object> withdraw(Long riderId, BigDecimal amount, String channel) {
+        if (amount == null || amount.compareTo(BigDecimal.ONE) < 0) {
+            throw new BusinessException(1001, "提现金额至少 1 元");
+        }
+        BigDecimal normalized = amount.setScale(2, RoundingMode.HALF_UP);
+        String resolvedChannel = channel == null || channel.isBlank() ? "微信" : channel.trim();
+        if (resolvedChannel.length() > 32) {
+            throw new BusinessException(1001, "提现渠道名称过长");
+        }
+        // 锁住骑手记录，避免并发提现把余额提成负数
+        jdbc.queryForList("SELECT id FROM sys_user WHERE id = :id FOR UPDATE", Map.of("id", riderId));
+        BigDecimal balance = walletBalance(riderId);
+        if (normalized.compareTo(balance) > 0) {
+            throw new BusinessException(4001, "超过可提现余额 ¥" + balance);
+        }
+        jdbc.update(
+                "INSERT INTO wallet_record(rider_id, type, amount, channel, status, created_at) "
+                        + "VALUES(:riderId, 'WITHDRAW', :amount, :channel, 'DONE', :createdAt)",
+                new MapSqlParameterSource()
+                        .addValue("riderId", riderId)
+                        .addValue("amount", normalized)
+                        .addValue("channel", resolvedChannel)
+                        .addValue("createdAt", LocalDateTime.now())
+        );
+        return wallet(riderId);
+    }
+
+    /** 当前时段的每单补贴，天气页、钱包页与收入口径共用 */
+    public BigDecimal subsidyPer() {
+        int hour = LocalTime.now().getHour();
+        if (hour >= 21 || hour < 5) {
+            return SUBSIDY_NIGHT.setScale(2, RoundingMode.HALF_UP);
+        }
+        if (hour >= 7 && hour < 9) {
+            return SUBSIDY_MORNING_PEAK.setScale(2, RoundingMode.HALF_UP);
+        }
+        return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal walletBalance(Long riderId) {
+        int todayDone = doneToday(riderId);
+        BigDecimal totalIncome = BASE_DELIVERY_PRICE
+                .multiply(BigDecimal.valueOf((long) doneTotal(riderId)))
+                .add(subsidyPer().multiply(BigDecimal.valueOf((long) todayDone)))
+                .setScale(2, RoundingMode.HALF_UP);
+        return totalIncome.subtract(withdrawnTotal(riderId)).setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal withdrawnTotal(Long riderId) {
+        BigDecimal withdrawn = jdbc.queryForObject(
+                "SELECT COALESCE(SUM(amount), 0) FROM wallet_record "
+                        + "WHERE rider_id = :id AND type = 'WITHDRAW' AND status = 'DONE'",
+                Map.of("id", riderId),
+                BigDecimal.class
+        );
+        return withdrawn == null ? BigDecimal.ZERO : withdrawn.setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private List<Map<String, Object>> withdrawRecords(Long riderId) {
+        List<Map<String, Object>> records = jdbc.query(
+                "SELECT id, amount, channel, status, created_at FROM wallet_record "
+                        + "WHERE rider_id = :id ORDER BY created_at DESC, id DESC LIMIT 20",
+                Map.of("id", riderId),
+                (rs, rowNum) -> {
+                    Map<String, Object> row = new LinkedHashMap<>();
+                    row.put("id", rs.getLong("id"));
+                    row.put("amount", rs.getBigDecimal("amount"));
+                    row.put("channel", rs.getString("channel"));
+                    row.put("status", rs.getString("status"));
+                    row.put("createdAt", toLocalDateTime(rs.getTimestamp("created_at")));
+                    return row;
+                }
+        );
+        return records == null ? new ArrayList<>() : records;
+    }
+
+    private int doneTotal(Long riderId) {
+        Integer count = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM orders WHERE rider_id = :id AND status = 'DONE'",
+                Map.of("id", riderId),
+                Integer.class
+        );
+        return count == null ? 0 : count;
+    }
+
+    private int doneToday(Long riderId) {
+        Integer count = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM orders WHERE rider_id = :id AND status = 'DONE' "
+                        + "AND DATE(updated_at) = CURRENT_DATE",
+                Map.of("id", riderId),
+                Integer.class
+        );
+        return count == null ? 0 : count;
     }
 
     public int onTheWay(Long riderId) {
