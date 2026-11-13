@@ -6,7 +6,7 @@
  * 绝不在这里直接返回“前端想要的形状”，否则切真接口那天要改 8 个页面。
  */
 
-import { DEMO_ACCOUNTS } from '../../constants/demoAccounts.js'
+import { DEMO_ACCOUNTS, ACCOUNT_ROLE } from '../../constants/demoAccounts.js'
 
 const DELAY = [120, 360]
 
@@ -14,49 +14,42 @@ const ok = (data) => ({ code: 200, message: 'ok', data })
 const fail = (code, message) => ({ code, message, data: null })
 
 /** 数据结构变化时改版本号，旧的 localStorage 数据自动作废 */
-const STORE_KEY = 'dcy_mock_db_v4'
+const STORE_KEY = 'dcy_mock_db_v5'
 
 function seed() {
   const now = Date.now()
   const ago = (h) => new Date(now - h * 36e5).toISOString()
 
-  /* ---------------- 员工 ---------------- */
-  const names = [
-    ['admin', '刘添祺', 'ADMIN', 1],
-    ['hyh', '胡粤毫', 'ADMIN', 1],
-    ['gy', '桂誉', 'ADMIN', 1],
-    ['zhangsan', '张三', 'STAFF', 1],
-    ['lisi', '李四', 'STAFF', 1],
-    ['wangwu', '王五', 'STAFF', 1],
-    ['zhaoliu', '赵六', 'STAFF', 0],
-    ['sunqi', '孙七', 'STAFF', 1],
-    ['zhouba', '周八', 'STAFF', 1],
-    ['wujiu', '吴九', 'STAFF', 0],
-    ['zhengshi', '郑十', 'STAFF', 1],
-    ['chenyi', '陈一', 'STAFF', 1]
+  /* ---------------- 骑手 ---------------- */
+  const rawRiders = [
+    ['rider', '胡粤毫', '13800001001', '中关村站', '电动车', 1, 1, 26, 2, 4.9],
+    ['rider2', '桂誉', '13800001002', '中关村站', '电动车', 1, 1, 21, 1, 4.8],
+    ['zhangwei', '张伟', '13800001003', '五道口站', '电动车', 1, 1, 18, 0, 4.7],
+    ['lina', '李娜', '13800001004', '五道口站', '摩托车', 1, 0, 12, 0, 4.6],
+    ['wangqiang', '王强', '13800001005', '望京站', '电动车', 1, 1, 30, 3, 5.0],
+    ['zhaomin', '赵敏', '13800001006', '望京站', '自行车', 1, 0, 9, 0, 4.4],
+    ['chenjie', '陈杰', '13800001007', '国贸站', '电动车', 1, 1, 24, 1, 4.8],
+    ['sunli', '孙丽', '13800001008', '国贸站', '电动车', 0, 0, 6, 0, 4.2],
+    ['zhouyang', '周洋', '13800001009', '西二旗站', '摩托车', 1, 1, 15, 2, 4.5],
+    ['wuting', '吴婷', '13800001010', '西二旗站', '电动车', 1, 0, 11, 0, 4.3]
   ]
-  const employees = names.map(([username, name, role, status], i) => ({
-    id: String(1001 + i),
-    username,
-    name,
-    phone: `1380000${String(1000 + i)}`,
-    role,
-    status,
-    lastLoginTime: ago(i * 7),
-    updateTime: ago(i * 3)
-  }))
-  for (let i = 10; i < 24; i++) {
-    employees.push({
+  const riders = rawRiders.map(
+    ([username, name, phone, area, vehicle, status, online, todayDone, onTheWay, rating], i) => ({
       id: String(1001 + i),
-      username: `staff${i}`,
-      name: `员工${i}`,
-      phone: `1390000${String(2000 + i)}`,
-      role: 'STAFF',
-      status: i % 3 === 0 ? 0 : 1,
-      lastLoginTime: ago(i * 11),
-      updateTime: ago(i * 5)
+      username,
+      code: 'R' + String(1001 + i),
+      name,
+      phone,
+      area,
+      vehicle,
+      status,
+      online,
+      todayDone,
+      onTheWay,
+      rating,
+      updateTime: ago(i * 3 + 1)
     })
-  }
+  )
 
   /* ---------------- 分类（type 1=菜品 2=套餐）---------------- */
   const rawCats = [
@@ -215,9 +208,13 @@ function seed() {
     if (status === 'CANCELED') {
       timeline.push({ status: 'CANCELED', time: new Date(new Date(createdAt).getTime() + 4 * 3600000).toISOString() })
     }
+    const needRider = status === 'DELIVERING' || status === 'DONE'
+    const riderRow = needRider ? riders[i % riders.length] : null
     orders.push({
       id: String(5001 + i),
       orderNo: 'DC' + String(now).slice(-6) + String(1001 + i),
+      riderId: riderRow ? String(riderRow.id) : '',
+      riderName: riderRow ? riderRow.name : '',
       userName,
       phone,
       tableNo,
@@ -235,8 +232,8 @@ function seed() {
   }
 
   return {
-    employees, categories, flavors, dishes, combos, orders,
-    seqEmp: 1001 + employees.length,
+    riders, categories, flavors, dishes, combos, orders,
+    seqRider: 1001 + riders.length,
     seqCat: 2001 + categories.length,
     seqDish: 3001 + dishes.length,
     seqCombo: 4001 + combos.length
@@ -281,31 +278,32 @@ const routes = [
   /* ---------------- 认证 ---------------- */
   {
     method: 'post',
-    url: /^\/admin\/login$/,
+    url: /^\/auth\/login$/,
     handler: ({ data }) => {
       const db = load()
       const username = String((data && data.username) || '').trim()
       const password = String((data && data.password) || '')
       const account = DEMO_ACCOUNTS.find((a) => a.username === username)
       if (!account || account.password !== password) {
-        const hints = DEMO_ACCOUNTS.map((a) => `${a.username} / ${a.password}`).join('、')
+        const hints = DEMO_ACCOUNTS.map((a) => `${a.username}/${a.password}`).join('、')
         return fail(2001, `账号或密码错误（演示账号：${hints}）`)
       }
-      const row = (db.employees || []).find((e) => e.username === username)
+      const role = ACCOUNT_ROLE[username] || 'CUSTOMER'
+      const rider = (db.riders || []).find((r) => r.username === username)
       return ok({
         token: 'mock-token-' + username,
         user: {
-          id: row ? String(row.id) : '9001',
+          id: rider ? String(rider.id) : role === 'MERCHANT' ? '9001' : '9002',
           username,
-          name: row ? row.name : account.name,
-          role: row ? row.role : account.role === '管理员' ? 'ADMIN' : 'STAFF'
+          name: rider ? rider.name : account.name,
+          role
         }
       })
     }
   },
   {
     method: 'get',
-    url: /^\/admin\/employee\/me$/,
+    url: /^\/auth\/me$/,
     handler: () => {
       const token = localStorage.getItem('dcy_token') || ''
       if (!token.startsWith('mock-token-')) return fail(401, '登录已过期，请重新登录')
@@ -313,27 +311,29 @@ const routes = [
       const account = DEMO_ACCOUNTS.find((a) => a.username === username)
       if (!account) return fail(401, '登录已过期，请重新登录')
       const db = load()
-      const row = (db.employees || []).find((e) => e.username === username)
+      const role = ACCOUNT_ROLE[username] || 'CUSTOMER'
+      const rider = (db.riders || []).find((r) => r.username === username)
       return ok({
-        id: row ? String(row.id) : '9001',
+        id: rider ? String(rider.id) : role === 'MERCHANT' ? '9001' : '9002',
         username,
-        name: row ? row.name : account.name,
-        role: row ? row.role : account.role === '管理员' ? 'ADMIN' : 'STAFF'
+        name: rider ? rider.name : account.name,
+        role
       })
     }
   },
 
-  /* ---------------- 员工 ---------------- */
+  /* ---------------- 骑手 ---------------- */
   {
     method: 'get',
-    url: /^\/admin\/employee\/page$/, 
+    url: /^\/admin\/rider\/page$/,
     handler: ({ params }) => {
       const db = load()
-      let rows = db.employees.slice()
-      const { name, username, role, status } = params || {}
+      let rows = (db.riders || []).slice()
+      const { name, code, area, online, status } = params || {}
       if (name) rows = rows.filter((r) => (r.name || '').includes(name))
-      if (username) rows = rows.filter((r) => (r.username || '').includes(username))
-      if (role) rows = rows.filter((r) => r.role === role)
+      if (code) rows = rows.filter((r) => (r.code || '').includes(code))
+      if (area) rows = rows.filter((r) => (r.area || '').includes(area))
+      if (notEmpty(online)) rows = rows.filter((r) => Number(r.online) === Number(online))
       if (notEmpty(status)) rows = rows.filter((r) => Number(r.status) === Number(status))
       rows.sort((a, b) => (a.updateTime < b.updateTime ? 1 : -1))
       return ok(paginate(rows, params))
@@ -341,39 +341,44 @@ const routes = [
   },
   {
     method: 'post',
-    url: /^\/admin\/employee$/, 
+    url: /^\/admin\/rider$/,
     handler: ({ data }) => {
       const db = load()
-      if (db.employees.some((r) => r.username === data.username)) {
-        return fail(4001, '账号已存在，请换一个')
-      }
+      if (db.riders.some((r) => r.phone === data.phone)) return fail(4001, '该手机号已注册骑手')
       const row = {
-        id: String(db.seqEmp++),
-        username: data.username,
-        name: data.name,
-        phone: data.phone || '',
-        role: data.role === 'ADMIN' ? 'ADMIN' : 'STAFF',
+        id: String(db.seqRider++),
+        username: (data.username || '').trim() || 'rider' + db.seqRider,
+        code: 'R' + String(db.seqRider - 1),
+        name: (data.name || '').trim(),
+        phone: String(data.phone || ''),
+        area: data.area || '',
+        vehicle: data.vehicle || '电动车',
         status: Number(data.status) === 0 ? 0 : 1,
-        lastLoginTime: null,
+        online: Number(data.online) === 1 ? 1 : 0,
+        todayDone: 0,
+        onTheWay: 0,
+        rating: 5.0,
         updateTime: new Date().toISOString()
       }
-      db.employees.unshift(row)
+      db.riders.unshift(row)
       save(db)
       return ok(row)
     }
   },
   {
     method: 'put',
-    url: /^\/admin\/employee$/, 
+    url: /^\/admin\/rider$/,
     handler: ({ data }) => {
       const db = load()
-      const row = db.employees.find((r) => String(r.id) === String(data.id))
-      if (!row) return fail(4004, '员工不存在或已被删除')
+      const row = db.riders.find((r) => String(r.id) === String(data.id))
+      if (!row) return fail(4004, '骑手不存在或已被删除')
       Object.assign(row, {
         name: data.name ?? row.name,
         phone: data.phone ?? row.phone,
-        role: data.role ?? row.role,
+        area: data.area ?? row.area,
+        vehicle: data.vehicle ?? row.vehicle,
         status: data.status === undefined ? row.status : Number(data.status),
+        online: data.online === undefined ? row.online : Number(data.online),
         updateTime: new Date().toISOString()
       })
       save(db)
@@ -382,24 +387,40 @@ const routes = [
   },
   {
     method: 'delete',
-    url: /^\/admin\/employee\/(\w+)$/, 
+    url: /^\/admin\/rider\/(\w+)$/,
     handler: ({ match }) => {
       const db = load()
-      if (match[1] === '1001') return fail(4002, '超级管理员不允许删除')
-      const before = db.employees.length
-      db.employees = db.employees.filter((r) => String(r.id) !== String(match[1]))
+      const row = db.riders.find((r) => String(r.id) === String(match[1]))
+      if (!row) return fail(4004, '骑手不存在')
+      if (Number(row.onTheWay) > 0) return fail(4001, `该骑手还有 ${row.onTheWay} 单在途，无法删除`)
+      db.riders = db.riders.filter((r) => String(r.id) !== String(match[1]))
       save(db)
-      return before === db.employees.length ? fail(4004, '员工不存在') : ok(true)
+      return ok(true)
     }
   },
   {
     method: 'put',
-    url: /^\/admin\/employee\/(\w+)\/status$/, 
+    url: /^\/admin\/rider\/(\w+)\/status$/,
     handler: ({ match, params }) => {
       const db = load()
-      const row = db.employees.find((r) => String(r.id) === String(match[1]))
-      if (!row) return fail(4004, '员工不存在')
+      const row = db.riders.find((r) => String(r.id) === String(match[1]))
+      if (!row) return fail(4004, '骑手不存在')
       row.status = Number(params?.status) === 0 ? 0 : 1
+      if (row.status === 0) row.online = 0
+      row.updateTime = new Date().toISOString()
+      save(db)
+      return ok(row)
+    }
+  },
+  {
+    method: 'put',
+    url: /^\/admin\/rider\/(\w+)\/online$/,
+    handler: ({ match, params }) => {
+      const db = load()
+      const row = db.riders.find((r) => String(r.id) === String(match[1]))
+      if (!row) return fail(4004, '骑手不存在')
+      if (Number(row.status) === 0) return fail(4001, '该骑手账号已停用，不能上线')
+      row.online = Number(params?.online) === 0 ? 0 : 1
       row.updateTime = new Date().toISOString()
       save(db)
       return ok(row)
@@ -706,6 +727,131 @@ const routes = [
       row.updateTime = new Date().toISOString()
       save(db)
       return ok(row)
+    }
+  },
+
+  /* ---------------- 骑手端（前缀 /rider）---------------- */
+  {
+    method: 'get',
+    url: /^\/rider\/me$/,
+    handler: () => {
+      const token = localStorage.getItem('dcy_token') || ''
+      if (!token.startsWith('mock-token-')) return fail(401, '登录已过期，请重新登录')
+      const username = token.slice('mock-token-'.length)
+      const db = load()
+      const row = (db.riders || []).find((r) => r.username === username)
+      return row ? ok(row) : fail(4004, '骑手不存在')
+    }
+  },
+  {
+    method: 'get',
+    url: /^\/rider\/tasks$/,
+    handler: ({ params }) => {
+      const db = load()
+      // 接单大厅：商家已接单、还没骑手接的
+      const rows = (db.orders || [])
+        .filter((o) => o.status === 'ACCEPTED' && !o.riderId)
+        .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
+      return ok(paginate(rows, params))
+    }
+  },
+  {
+    method: 'post',
+    url: /^\/rider\/tasks\/(\w+)\/grab$/,
+    handler: ({ match }) => {
+      const db = load()
+      const token = localStorage.getItem('dcy_token') || ''
+      const username = token.replace('mock-token-', '')
+      const me = (db.riders || []).find((r) => r.username === username)
+      if (!me) return fail(4004, '骑手不存在')
+      if (Number(me.online) !== 1) return fail(4001, '请先上线接单')
+      if (Number(me.status) !== 1) return fail(4001, '账号已停用，不能接单')
+      const row = (db.orders || []).find((o) => String(o.id) === String(match[1]))
+      if (!row) return fail(4004, '订单不存在')
+      if (row.riderId) return fail(4001, '手慢了，这单已被其他骑手接走')
+      if (row.status !== 'ACCEPTED') return fail(4001, '该订单当前不可接单')
+      row.riderId = String(me.id)
+      row.riderName = me.name
+      row.status = 'DELIVERING'
+      row.timeline = [...(row.timeline || []), { status: 'DELIVERING', time: new Date().toISOString() }]
+      me.onTheWay = Number(me.onTheWay || 0) + 1
+      save(db)
+      return ok(row)
+    }
+  },
+  {
+    method: 'get',
+    url: /^\/rider\/orders$/,
+    handler: ({ params }) => {
+      const db = load()
+      const token = localStorage.getItem('dcy_token') || ''
+      const username = token.replace('mock-token-', '')
+      const me = (db.riders || []).find((r) => r.username === username)
+      if (!me) return fail(4004, '骑手不存在')
+      const status = (params || {}).status
+      let rows = (db.orders || []).filter((o) => String(o.riderId) === String(me.id))
+      if (status) rows = rows.filter((o) => o.status === status)
+      rows = rows.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
+      return ok(paginate(rows, params))
+    }
+  },
+  {
+    method: 'post',
+    url: /^\/rider\/orders\/(\w+)\/finish$/,
+    handler: ({ match }) => {
+      const db = load()
+      const token = localStorage.getItem('dcy_token') || ''
+      const username = token.replace('mock-token-', '')
+      const me = (db.riders || []).find((r) => r.username === username)
+      if (!me) return fail(4004, '骑手不存在')
+      const row = (db.orders || []).find((o) => String(o.id) === String(match[1]))
+      if (!row) return fail(4004, '订单不存在')
+      if (String(row.riderId) !== String(me.id)) return fail(4003, '这不是你的配送单')
+      if (row.status !== 'DELIVERING') return fail(4001, '该订单当前不是配送中')
+      row.status = 'DONE'
+      row.timeline = [...(row.timeline || []), { status: 'DONE', time: new Date().toISOString() }]
+      me.onTheWay = Math.max(0, Number(me.onTheWay || 0) - 1)
+      me.todayDone = Number(me.todayDone || 0) + 1
+      save(db)
+      return ok(row)
+    }
+  },
+  {
+    method: 'get',
+    url: /^\/rider\/stats$/,
+    handler: () => {
+      const db = load()
+      const token = localStorage.getItem('dcy_token') || ''
+      const username = token.replace('mock-token-', '')
+      const me = (db.riders || []).find((r) => r.username === username)
+      if (!me) return fail(4004, '骑手不存在')
+      const mine = (db.orders || []).filter((o) => String(o.riderId) === String(me.id))
+      const done = mine.filter((o) => o.status === 'DONE')
+      const income = Number((done.length * 5).toFixed(2))
+      return ok({
+        online: Number(me.online),
+        todayDone: Number(me.todayDone || 0),
+        onTheWay: Number(me.onTheWay || 0),
+        rating: Number(me.rating || 5),
+        totalDone: done.length,
+        income,
+        availableTasks: (db.orders || []).filter((o) => o.status === 'ACCEPTED' && !o.riderId).length
+      })
+    }
+  },
+  {
+    method: 'put',
+    url: /^\/rider\/online$/,
+    handler: ({ params }) => {
+      const db = load()
+      const token = localStorage.getItem('dcy_token') || ''
+      const username = token.replace('mock-token-', '')
+      const me = (db.riders || []).find((r) => r.username === username)
+      if (!me) return fail(4004, '骑手不存在')
+      if (Number(me.status) !== 1) return fail(4001, '账号已停用，不能上线')
+      me.online = Number(params?.online) === 0 ? 0 : 1
+      save(db)
+      return ok(me)
     }
   },
 

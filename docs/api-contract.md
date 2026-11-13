@@ -7,6 +7,55 @@
 
 ---
 
+## 〇之一、三角色改造（2026-11，外卖平台）
+
+系统定位从「点餐 + 管理员/员工」改为**外卖平台的三大类使用者**：
+
+| 角色 | key | 入口 | 用的是哪套前缀 |
+|---|---|---|---|
+| 商家 | `MERCHANT` | `/#/login` → `/#/dashboard`（PC 后台） | `/admin/**` |
+| 骑手 | `RIDER` | `/#/rider/workbench`（手机尺寸） | `/rider/**` |
+| 顾客 | `CUSTOMER` | `/#/h5/*`（手机尺寸） | `/user/**` |
+| — | — | 三类共用 | `/auth/**`（登录、当前用户） |
+
+### 路径前缀（前端 `src/api/urls.js` 一处定义）
+
+```js
+AUTH_PREFIX  = '/auth'    // POST /auth/login、GET /auth/me
+ADMIN_PREFIX = '/admin'   // 商家端
+RIDER_PREFIX = '/rider'   // 骑手端
+USER_PREFIX  = '/user'    // 顾客端
+```
+
+### 订单状态机（外卖四段式，商家与骑手分工）
+
+```
+顾客下单 → PENDING(待商家接单) → ACCEPTED(待骑手接单) → DELIVERING(配送中) → DONE(已送达)
+                                    ↘ CANCELED(已取消)
+```
+
+| 动作 | 谁做 | 从 → 到 |
+|---|---|---|
+| 接单 | 商家 | `PENDING` → `ACCEPTED` |
+| 抢单配送 | 骑手 | `ACCEPTED` → `DELIVERING` |
+| 确认送达 | 骑手 | `DELIVERING` → `DONE` |
+| 取消 | 商家 | `PENDING`/`ACCEPTED` → `CANCELED` |
+
+### 骑手端新增接口（后端要补）
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | `/rider/me` | 当前骑手资料 `{id,code,name,phone,area,vehicle,status,online,todayDone,onTheWay,rating}` |
+| GET | `/rider/tasks` | 接单大厅：`status=ACCEPTED` 且未分配骑手的订单，分页 |
+| POST | `/rider/tasks/{orderId}/grab` | 抢单：分配骑手并把订单置为 `DELIVERING`；已被抢返回业务错误 |
+| GET | `/rider/orders` | 我的配送单（`riderId=当前骑手`），可按 `status` 过滤 |
+| POST | `/rider/orders/{orderId}/finish` | 确认送达 → `DONE`，并累加骑手今日完成数 |
+| GET | `/rider/stats` | `{online,todayDone,onTheWay,rating,totalDone,income,availableTasks}` |
+| PUT | `/rider/online` | 骑手自己上线/休息，入参 `online=0\|1` |
+| GET/POST/PUT/DELETE | `/admin/rider/**` | 商家侧的骑手管理（列表、新增、编辑、删除、`/{id}/status`、`/{id}/online`） |
+
+> 订单 DTO 新增两个字段：`riderId`（未接单为空串）、`riderName`。
+
 ## 〇、与 dandanyun 后端框架的对接现状（2026-11）
 
 后端仓库：<https://github.com/TianCha101/dandanyun>（最小运行框架：统一返回 + 全局异常 + 跨域 + 两套路径前缀，暂无数据库 / Redis / 登录）

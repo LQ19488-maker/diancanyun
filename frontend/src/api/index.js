@@ -6,7 +6,7 @@
  * 路径前缀统一由 api/urls.js 提供（/admin 管理端、/user 用户端），换后端只改那一个文件。
  */
 import auth from './adapters/auth'
-import employee from './adapters/employee'
+import rider from './adapters/rider'
 import category from './adapters/category'
 import dish from './adapters/dish'
 import combo from './adapters/combo'
@@ -15,8 +15,8 @@ import h5 from './adapters/h5'
 import upload from './adapters/upload'
 import statistics from './adapters/statistics'
 
-const api = { auth, employee, category, dish, combo, order, h5, upload, statistics }
+const api = { auth, rider, category, dish, combo, order, h5, upload, statistics }
 
 export default api
 export { IS_MOCK, resolveFileUrl } from './http'
-export { adminUrl, userUrl } from './urls'
+export { adminUrl, userUrl, riderUrl, authUrl } from './urls'

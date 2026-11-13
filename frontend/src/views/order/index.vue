@@ -118,7 +118,7 @@ import OrderDetail from './detail-drawer.vue'
 import { useTable } from '@/composables/useTable'
 import { formatDateTime, formatPrice, maskPhone, buildDateRange } from '@/utils/format'
 import { downloadCsv } from '@/utils/csv'
-import { ORDER_STATUS, ORDER_ACTION_LABEL, PAY_STATUS } from '@/constants/enums'
+import { ORDER_STATUS, ORDER_ACTION_LABEL, PAY_STATUS, MERCHANT_ACTIONS } from '@/constants/enums'
 import api from '@/api'
 
 const ACTION_LABEL = ORDER_ACTION_LABEL
@@ -148,10 +148,10 @@ const table = useTable(api.order.page, {
 
 const summary = api.order.summary
 
-/** 当前状态下"往前推"的那个动作（取消不放列表里，避免误点） */
+/** 商家只做「接单」，配送相关动作（抢单配送/确认送达）归骑手端 */
 function forwardOf(status) {
   const next = ORDER_STATUS[status]?.next || []
-  return next.find((s) => s !== 'CANCELED') || ''
+  return next.find((s) => MERCHANT_ACTIONS.includes(s) && s !== 'CANCELED') || ''
 }
 
 async function loadCounts() {

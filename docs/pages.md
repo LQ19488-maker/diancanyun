@@ -10,13 +10,20 @@
 | # | 路由 | 页面 | 端口 | 权限 | 状态 |
 |---|---|---|---|---|---|
 | 1 | `/#/login` | 登录 | PC | 公开 | ✅ |
-| 2 | `/#/dashboard` | 工作台（统计看板） | PC | 登录即可 | ✅ |
-| 3 | `/#/employee` | 员工管理 | PC | ADMIN | ✅ |
-| 4 | `/#/category` | 分类管理与口味配置 | PC | ADMIN | ✅ |
-| 5 | `/#/dish` | 菜品管理 | PC | ADMIN / STAFF | ✅ |
-| 6 | `/#/combo` | 套餐管理 | PC | ADMIN | ✅ |
-| 7 | `/#/order` | 订单管理 | PC | ADMIN / STAFF | ✅ |
+| 2 | `/#/dashboard` | 工作台（统计看板） | PC | MERCHANT | ✅ |
+| 3 | `/#/riders` | 骑手管理（商家侧） | PC | MERCHANT | ✅ |
+| 4 | `/#/category` | 分类管理与口味配置 | PC | MERCHANT | ✅ |
+| 5 | `/#/dish` | 菜品管理 | PC | MERCHANT | ✅ |
+| 6 | `/#/combo` | 套餐管理 | PC | MERCHANT | ✅ |
+| 7 | `/#/order` | 订单管理 | PC | MERCHANT | ✅ |
 | 8 | `/#/h5/menu` | 用户端点餐（5 页） | H5 | 公开 | ✅ |
+
+| 9 | `/#/rider/workbench` | 骑手接单大厅 | 手机 | RIDER | ✅ |
+| 10 | `/#/rider/mine` | 骑手我的配送 | 手机 | RIDER | ✅ |
+| 11 | `/#/h5/*` | 顾客点餐（5 页） | 手机 | 公开 | ✅ |
+
+> 角色：`MERCHANT` 商家 · `RIDER` 骑手 · `CUSTOMER` 顾客；登录后按角色自动进各自首页。
+> 演示账号见登录页（merchant / rider / rider2 / customer）。
 
 ---
 
