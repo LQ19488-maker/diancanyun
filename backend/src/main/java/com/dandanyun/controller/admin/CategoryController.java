@@ -37,31 +37,31 @@ public class CategoryController {
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int pageSize
     ) {
-        AuthContext.requireAdmin();
+        AuthContext.requireMerchant();
         return Result.ok(categoryService.page(type, name, status, page, pageSize));
     }
 
     @PostMapping("/category")
     public Result<Map<String, Object>> create(@RequestBody CategoryRequest request) {
-        AuthContext.requireAdmin();
+        AuthContext.requireMerchant();
         return Result.ok(categoryService.create(request));
     }
 
     @PutMapping("/category")
     public Result<Map<String, Object>> update(@RequestBody CategoryRequest request) {
-        AuthContext.requireAdmin();
+        AuthContext.requireMerchant();
         return Result.ok(categoryService.update(request));
     }
 
     @DeleteMapping("/category/{id}")
     public Result<Boolean> delete(@PathVariable Long id) {
-        AuthContext.requireAdmin();
+        AuthContext.requireMerchant();
         return Result.ok(categoryService.delete(id));
     }
 
     @GetMapping("/flavor/{categoryId}")
     public Result<Map<String, Object>> getFlavors(@PathVariable Long categoryId) {
-        AuthContext.requireAdmin();
+        AuthContext.requireMerchant();
         return Result.ok(Map.of("flavors", categoryService.getFlavors(categoryId)));
     }
 
@@ -70,7 +70,7 @@ public class CategoryController {
             @PathVariable Long categoryId,
             @RequestBody FlavorConfigRequest request
     ) {
-        AuthContext.requireAdmin();
+        AuthContext.requireMerchant();
         return Result.ok(Map.of("flavors", categoryService.saveFlavors(categoryId, request)));
     }
 }

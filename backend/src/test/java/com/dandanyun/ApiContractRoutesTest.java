@@ -34,13 +34,14 @@ class ApiContractRoutesTest {
         });
 
         Set<String> expected = Set.of(
-                "POST /admin/login",
-                "GET /admin/employee/me",
-                "GET /admin/employee/page",
-                "POST /admin/employee",
-                "PUT /admin/employee",
-                "DELETE /admin/employee/{id}",
-                "PUT /admin/employee/{id}/status",
+                "POST /auth/login",
+                "GET /auth/me",
+                "GET /admin/rider/page",
+                "POST /admin/rider",
+                "PUT /admin/rider",
+                "DELETE /admin/rider/{id}",
+                "PUT /admin/rider/{id}/status",
+                "PUT /admin/rider/{id}/online",
                 "GET /admin/category/page",
                 "POST /admin/category",
                 "PUT /admin/category",
@@ -64,10 +65,24 @@ class ApiContractRoutesTest {
                 "PUT /admin/order/{id}/status",
                 "GET /admin/statistics/overview",
                 "POST /admin/upload",
+                "GET /user/shops",
+                "GET /user/shop/{id}",
                 "GET /user/menu",
+                "GET /user/addresses",
+                "POST /user/address",
+                "PUT /user/address",
+                "PUT /user/address/{id}/default",
+                "DELETE /user/address/{id}",
                 "POST /user/order",
                 "GET /user/order/{id}",
-                "GET /user/orders"
+                "GET /user/orders",
+                "GET /rider/me",
+                "GET /rider/stats",
+                "PUT /rider/online",
+                "GET /rider/tasks",
+                "POST /rider/tasks/{orderId}/grab",
+                "GET /rider/orders",
+                "POST /rider/orders/{orderId}/finish"
         );
 
         Set<String> missing = new HashSet<>(expected);

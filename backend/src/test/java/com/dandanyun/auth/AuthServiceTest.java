@@ -22,10 +22,10 @@ class AuthServiceTest {
                 new JwtTokenService(properties, new ObjectMapper())
         );
 
-        LoginResponse response = service.login(new LoginRequest("admin", "secret-value"), UserRole.ADMIN);
+        LoginResponse response = service.login(new LoginRequest("admin", "secret-value"), UserRole.MERCHANT);
 
         assertEquals("Bearer", response.tokenType());
-        assertEquals(UserRole.ADMIN, response.user().role());
+        assertEquals(UserRole.MERCHANT, response.user().role());
     }
 
     @Test
@@ -41,7 +41,7 @@ class AuthServiceTest {
 
         assertThrows(
                 AuthenticationException.class,
-                () -> service.login(new LoginRequest("admin", "secret-value"), UserRole.STAFF)
+                () -> service.login(new LoginRequest("admin", "secret-value"), UserRole.RIDER)
         );
     }
 
@@ -74,7 +74,7 @@ class AuthServiceTest {
         user.setUsername("admin");
         user.setDisplayName("系统管理员");
         user.setPasswordHash(passwordHash);
-        user.setRole(UserRole.ADMIN);
+        user.setRole(UserRole.MERCHANT);
         user.setStatus(1);
         return user;
     }

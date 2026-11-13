@@ -1,10 +1,6 @@
 # 点单云 · Spring Boot 后端
 
-《点单云》餐饮点餐系统的后端服务，已按团队前端仓库
-[LQ19488-maker/diancanyun](https://github.com/LQ19488-maker/diancanyun)
-的接口契约完成适配。
-
-本项目为纯 Java 后端，包含管理端、H5 点餐、JWT 鉴权、MySQL 持久化和统计接口。
+《点单云》外卖平台后端，按前端仓库当前三角色和外卖流程契约实现。
 
 ## 技术基线
 
@@ -15,58 +11,63 @@
 | Maven | 3.9+ |
 | MySQL | 26.7 |
 | MyBatis | 4.0.1 |
-| Web 服务端口 | 8080 |
+| 服务端口 | 8080 |
 
-## 已实现
+## 角色与入口
+
+| 角色 | key | 前端入口 | 后端前缀 |
+|---|---|---|---|
+| 商家 | `MERCHANT` | 商家后台 | `/admin/**` |
+| 骑手 | `RIDER` | 骑手工作台 | `/rider/**` |
+| 顾客 | `CUSTOMER` | 外卖 H5 | `/user/**` |
+| 三类共用 | — | 登录与当前用户 | `/auth/**` |
+
+登录接口：
+
+```text
+POST /auth/login
+{ "username": "merchant", "password": "merchant1234" }
+```
+
+## 已实现模块
 
 | 模块 | 能力 |
 |---|---|
-| 登录鉴权 | `/admin/login`、JWT、`ADMIN` / `STAFF` 角色 |
-| 员工 | 当前用户、分页、新增、编辑、删除、启停 |
-| 分类 | 分页、新增、编辑、删除、引用检查 |
-| 口味 | 分类口味读取与整体覆盖保存 |
-| 菜品 | 分页、新增、编辑、删除、上下架、口味 JSON |
-| 套餐 | 分页、详情、新增、编辑、删除、上下架、菜品关联 |
-| 订单 | H5 下单、分页、详情、状态数量、状态机流转 |
-| H5 用户端 | 菜单、提交订单、订单详情、我的订单 |
-| 统计 | 营业额、订单量、客单价、完成率、趋势、状态分布、热销菜品 |
-| 上传 | `/admin/upload`，图片存储到可配置目录 |
-| 公共能力 | 统一返回、异常处理、请求 ID、Long 字符串序列化、CORS |
+| 认证 | `/auth/login`、`/auth/me`、JWT 三角色鉴权 |
+| 商家 | 分类、口味、菜品、套餐、订单、统计、图片上传 |
+| 骑手管理 | 骑手分页、新增、编辑、删除、启停、上线/休息 |
+| 骑手工作台 | 当前资料、统计、可抢订单、抢单配送、我的配送、确认送达 |
+| 店铺 | 店铺列表、店铺详情、营业状态、起送价和配送费 |
+| 顾客 | 店铺点餐、菜单、收货地址、下单、订单详情、我的订单 |
+| 订单 | 商家接单、骑手抢单、配送、送达、取消状态机 |
 
-完整接口与前端字段对应关系见 [docs/api-compatibility.md](docs/api-compatibility.md)。
-
-## 前端对接
-
-前端仓库：<https://github.com/LQ19488-maker/diancanyun>
-
-在 `frontend/.env.local` 中设置：
-
-```dotenv
-VITE_USE_MOCK=false
-VITE_PROXY_TARGET=http://127.0.0.1:8080
-VITE_API_BASE=
-VITE_UPLOAD_BASE=
-```
-
-管理端登录：
+## 订单流程
 
 ```text
-POST /admin/login
-{ "username": "admin", "password": "admin1234" }
+PENDING
+  商家接单
+    ↓
+ACCEPTED
+  骑手抢单
+    ↓
+DELIVERING
+  骑手确认送达
+    ↓
+DONE
 ```
 
-H5 用户端无需登录，直接访问：
+商家可在 `PENDING` 或 `ACCEPTED` 状态取消订单。
 
-```text
-GET /user/menu
-POST /user/order
-GET /user/order/{id}
-GET /user/orders
-```
+## 演示账号
+
+| 用户名 | 密码 | 角色 |
+|---|---|---|
+| `merchant` | `merchant1234` | 商家 |
+| `rider` | `rider1234` | 骑手 |
+| `rider2` | `rider21234` | 骑手 |
+| `customer` | `customer1234` | 顾客 |
 
 ## 数据库初始化
-
-### 1. 创建数据库
 
 ```sql
 CREATE DATABASE dandanyun
@@ -74,9 +75,7 @@ CREATE DATABASE dandanyun
   COLLATE utf8mb4_0900_ai_ci;
 ```
 
-### 2. 配置环境变量
-
-PowerShell 示例：
+PowerShell：
 
 ```powershell
 $env:DB_URL = "jdbc:mysql://127.0.0.1:3306/dandanyun?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false"
@@ -86,9 +85,9 @@ $env:DB_INIT_MODE = "always"
 $env:DANDANYUN_JWT_SECRET = "至少32字节、部署时必须替换的随机密钥"
 ```
 
-首次启动使用 `DB_INIT_MODE=always` 执行 `schema.sql` 和 `data.sql`，之后改为 `never`。
+首次启动执行建表和初始化数据，之后把 `DB_INIT_MODE` 改成 `never`。
 
-### 3. 构建并启动
+## 构建与启动
 
 ```powershell
 .\build.bat
@@ -102,46 +101,28 @@ mvn clean package
 java -jar target\dandanyun-server-0.0.1-SNAPSHOT.jar
 ```
 
-## 演示账号
-
-| 用户名 | 密码 | 角色 |
-|---|---|---|
-| `admin` | `admin1234` | ADMIN |
-| `hyh` | `hyh1234` | ADMIN |
-| `gy` | `gy1234` | ADMIN |
-| `staff` | `staff1234` | STAFF |
-
-演示密码仅用于本地和课程演示，正式部署前需要替换。
-
 ## 环境变量
 
 | 变量 | 默认值 | 说明 |
 |---|---|---|
-| `DB_URL` | 本地 `dandanyun` 数据库 | JDBC 地址 |
+| `DB_URL` | 本地 `dandanyun` | JDBC 地址 |
 | `DB_USERNAME` | `root` | 数据库用户 |
 | `DB_PASSWORD` | 空 | 数据库密码 |
-| `DB_POOL_SIZE` | `10` | HikariCP 最大连接数 |
-| `DB_INIT_MODE` | `never` | 是否执行初始化脚本 |
+| `DB_POOL_SIZE` | `10` | HikariCP 连接数 |
+| `DB_INIT_MODE` | `never` | 是否初始化数据库 |
 | `DANDANYUN_JWT_SECRET` | 开发默认值 | JWT 密钥，至少 32 字节 |
 | `DANDANYUN_JWT_EXPIRATION_SECONDS` | `7200` | Token 有效期 |
 | `DANDANYUN_PASSWORD_ITERATIONS` | `120000` | PBKDF2 迭代次数 |
-| `UPLOAD_DIR` | `./uploads` | 图片存储目录 |
+| `UPLOAD_DIR` | `./uploads` | 图片目录 |
+| `MERCHANT_SHOP_ID` | `10001` | 商家菜品所属店铺 ID |
 
-## 接口返回
-
-成功：
+## 返回约定
 
 ```json
 { "code": 200, "message": "ok", "data": {} }
 ```
 
-分页：
-
-```json
-{ "total": 1, "records": [], "page": 1, "pageSize": 10 }
-```
-
-所有 Long 主键均序列化为字符串，避免 JavaScript 大整数精度丢失。
+所有 Long 主键序列化为字符串，避免 JavaScript 精度丢失。
 
 ## 测试
 
@@ -149,13 +130,4 @@ java -jar target\dandanyun-server-0.0.1-SNAPSHOT.jar
 mvn test
 ```
 
-当前测试覆盖：
-
-- 应用启动、健康检查和数据库就绪检查
-- `/admin/login` 和 H5 菜单公开路径
-- JWT 签发、签名篡改和过期校验
-- PBKDF2 密码摘要
-- `ADMIN` / `STAFF` 管理端访问
-- Long 主键字符串序列化
-
-数据库业务接口的端到端测试需要提供可用的 MySQL 凭据。
+测试覆盖应用启动、三角色鉴权、JWT、密码、公开路径、Long 序列化和前端路由契约。

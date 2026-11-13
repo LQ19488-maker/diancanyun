@@ -56,7 +56,7 @@ USER_PREFIX  = '/user'    // 顾客端
 
 > 订单 DTO 新增两个字段：`riderId`（未接单为空串）、`riderName`。
 
-## 〇、与 dandanyun 后端框架的对接现状（2026-11）
+## 〇、后端对接现状（2026-11）
 
 后端代码已放在本仓库 `backend/`：Java 25 + Spring Boot 4 + MySQL + JWT。
 
@@ -65,18 +65,20 @@ USER_PREFIX  = '/user'    // 顾客端
 | 项 | 后端实现 | 前端实现 | 状态 |
 |---|---|---|---|
 | 响应体 | `{ code: 200, message: "ok", data: {} }` | `http.js` 的 `unwrap()`：code 为 0 或 200 视为成功，取 data；失败用 message（兼容旧字段 msg） | ✅ 已对齐 |
-| 路径前缀 | 管理端 `/admin/**`、用户端 `/user/**` | `src/api/urls.js` 里的 `adminUrl()` / `userUrl()`，所有 adapter 都走它 | ✅ 已对齐 |
-| 同源部署 | 端口 8080，自带 CORS | VITE_API_BASE 留空（同源相对路径）；开发时 vite 代理 /admin、/user → 127.0.0.1:8080 | ✅ 已对齐 |
+| 路径前缀 | `/auth/**`、`/admin/**`、`/rider/**`、`/user/**` | `src/api/urls.js` 统一生成四类前缀 | ✅ 已对齐 |
+| 同源部署 | 端口 8080，自带 CORS | `VITE_API_BASE` 留空；Vite 代理四类前缀到 8080 | ✅ 已对齐 |
 
 > 换后端只改一个文件：路径前缀在 src/api/urls.js，响应体解包在 src/api/http.js。页面与 adapter 的字段映射不用动。
 
-### 前端需要的接口（按优先级）
+### 已实现接口
 
 | 优先级 | 接口 | 用途 | 备注 |
 |---|---|---|---|
-| P0 | POST /admin/login | 登录，返回 { token, user:{id,username,name,role} } | 没有它前端只能继续用 mock |
-| P0 | GET /admin/employee/me | 当前登录人（角色决定菜单与路由权限） | 角色取值 ADMIN / STAFF |
-| P0 | GET /admin/employee/page、POST/PUT /admin/employee、DELETE /admin/employee/{id}、PUT /admin/employee/{id}/status | 员工管理 | 分页出参请用 { total, records } |
+| P0 | POST /auth/login、GET /auth/me | 三角色登录与当前用户 | MERCHANT / RIDER / CUSTOMER |
+| P0 | `/admin/rider/**` | 商家侧骑手管理 | 分页、新增、编辑、删除、启停、上线 |
+| P0 | `/rider/**` | 骑手接单工作台 | 任务、抢单、配送、送达、统计 |
+| P0 | `/user/shops`、`/user/shop/{id}` | 外卖店铺首页与详情 | 起送价、配送费、营业状态 |
+| P0 | `/user/addresses`、`/user/address/**` | 顾客收货地址 | 默认地址唯一 |
 | P1 | GET /admin/category/page、POST/PUT /admin/category、DELETE /admin/category/{id} | 分类管理 | 被引用时返回业务错误码 + 中文 message |
 | P1 | GET/PUT /admin/flavor/{categoryId} | 口味配置（整体覆盖） | PUT 入参 { flavors:[{name, values:[{name}]}] } |
 | P2 | GET /admin/statistics/overview | 工作台指标卡与图表 | 见 2.3 节出参 |
@@ -89,9 +91,9 @@ USER_PREFIX  = '/user'    // 顾客端
 
 ### 联调顺序
 
-1. 先打 GET /health，确认 8080 可访问（前端可用 Invoke-WebRequest／浏览器直接开）
-2. 再做 POST /admin/login + GET /admin/employee/me，前端把 `VITE_USE_MOCK` 改成 `false` 就能登录
-3. 然后一个列表接口（/admin/employee/page），验证分页字段与 Long 精度
+1. 先打 GET /health，确认 8080 可访问
+2. 再做 POST /auth/login + GET /auth/me
+3. 验证商家骑手管理、顾客店铺和骑手任务列表
 4. 逐个模块补齐，每补一个就在本文档「已知差异」表里登记一次
 
 ---
@@ -164,30 +166,36 @@ USER_PREFIX  = '/user'    // 顾客端
 
 | 方法 | 路径 | 入参 | 出参 `data` |
 |---|---|---|---|
-| POST | `/admin/login` | `{ username, password }` | `{ token, user: { id, username, name, role } }` |
-| GET | `/admin/employee/me` | — | `{ id, username, name, role }` |
+| POST | `/auth/login` | `{ username, password }` | `{ token, user: { id, username, name, role } }` |
+| GET | `/auth/me` | — | `{ id, username, name, role }` |
 
-`role` 取值：`ADMIN`（管理员）、`STAFF`（员工）。若后端用数字，请告知，前端在 adapter 里映射。
+`role` 取值：`MERCHANT`、`RIDER`、`CUSTOMER`。
 
-### 2.2 员工管理
+### 2.2 骑手管理
 
 | 方法 | 路径 | 入参 | 出参 `data` |
 |---|---|---|---|
-| GET | `/admin/employee/page` | `page, pageSize, name?, username?, role?, status?` | `{ total, records: [Employee] }` |
-| POST | `/admin/employee` | `{ username, password, name, phone, role, status }` | `Employee` |
-| PUT | `/admin/employee` | `{ id, name, phone, role, status }` | `Employee` |
-| DELETE | `/admin/employee/{id}` | — | `true` |
-| PUT | `/admin/employee/{id}/status` | `status=0\|1`（query） | `Employee` |
+| GET | `/admin/rider/page` | `page,pageSize,name?,code?,area?,online?,status?` | `{ total, records:[Rider] }` |
+| POST | `/admin/rider` | 骑手账号、姓名、手机号、站点、车型 | `Rider` |
+| PUT | `/admin/rider` | 修改骑手资料和在线状态 | `Rider` |
+| DELETE | `/admin/rider/{id}` | 有在途单时禁止删除 | `true` |
+| PUT | `/admin/rider/{id}/status` | 启停账号 | `true` |
+| PUT | `/admin/rider/{id}/online` | 上线或休息 | `true` |
 
 ```ts
-interface Employee {
+interface Rider {
   id: string
+  code: string
   username: string
   name: string
   phone: string
-  role: 'ADMIN' | 'STAFF'
-  status: 0 | 1          // 1 启用 / 0 停用
-  lastLoginTime?: string
+  area: string
+  vehicle: string
+  status: 0 | 1
+  online: 0 | 1
+  todayDone: number
+  onTheWay: number
+  rating: number
   updateTime?: string
 }
 ```

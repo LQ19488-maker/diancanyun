@@ -23,6 +23,10 @@ public class AuthService {
         this.tokenService = tokenService;
     }
 
+    public LoginResponse login(LoginRequest request) {
+        return login(request, null);
+    }
+
     public LoginResponse login(LoginRequest request, UserRole expectedRole) {
         validate(request);
         String username = request.username().trim();
@@ -33,7 +37,7 @@ public class AuthService {
         if (user.getStatus() == null || user.getStatus() != 1) {
             throw new AuthenticationException("账号已停用");
         }
-        if (user.getRole() != expectedRole) {
+        if (expectedRole != null && user.getRole() != expectedRole) {
             throw new AuthenticationException("账号类型与登录入口不匹配");
         }
 

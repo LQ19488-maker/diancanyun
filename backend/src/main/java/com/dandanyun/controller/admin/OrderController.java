@@ -52,6 +52,6 @@ public class OrderController {
             @PathVariable Long id,
             @RequestBody OrderStatusRequest request
     ) {
-        return Result.ok(orderService.changeStatus(id, request == null ? null : request.status()));
+        return Result.ok(orderService.merchantChangeStatus(id, request == null ? null : request.status()));
     }
 }

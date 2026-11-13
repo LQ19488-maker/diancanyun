@@ -40,6 +40,7 @@ mybatis:
     default-statement-timeout: 10
 
 app:
+  merchant-shop-id: ${MERCHANT_SHOP_ID:10001}
   upload-dir: ${UPLOAD_DIR:./uploads}
   cors:
     allowed-origin-patterns:

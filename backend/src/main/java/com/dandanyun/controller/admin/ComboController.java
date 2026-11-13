@@ -35,37 +35,37 @@ public class ComboController {
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int pageSize
     ) {
-        AuthContext.requireAdmin();
+        AuthContext.requireMerchant();
         return Result.ok(comboService.page(name, categoryId, status, page, pageSize));
     }
 
     @GetMapping("/{id}")
     public Result<Map<String, Object>> detail(@PathVariable Long id) {
-        AuthContext.requireAdmin();
+        AuthContext.requireMerchant();
         return Result.ok(comboService.find(id));
     }
 
     @PostMapping
     public Result<Map<String, Object>> create(@RequestBody ComboRequest request) {
-        AuthContext.requireAdmin();
+        AuthContext.requireMerchant();
         return Result.ok(comboService.create(request));
     }
 
     @PutMapping
     public Result<Map<String, Object>> update(@RequestBody ComboRequest request) {
-        AuthContext.requireAdmin();
+        AuthContext.requireMerchant();
         return Result.ok(comboService.update(request));
     }
 
     @DeleteMapping("/{id}")
     public Result<Boolean> delete(@PathVariable Long id) {
-        AuthContext.requireAdmin();
+        AuthContext.requireMerchant();
         return Result.ok(comboService.delete(id));
     }
 
     @PutMapping("/{id}/status")
     public Result<Boolean> changeStatus(@PathVariable Long id, @RequestParam int status) {
-        AuthContext.requireAdmin();
+        AuthContext.requireMerchant();
         return Result.ok(comboService.changeStatus(id, status));
     }
 }

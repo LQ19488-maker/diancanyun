@@ -22,10 +22,26 @@ public final class AuthContext {
         return user;
     }
 
-    public static AuthenticatedUser requireAdmin() {
+    public static AuthenticatedUser requireMerchant() {
         AuthenticatedUser user = require();
-        if (user.role() != UserRole.ADMIN) {
-            throw new AccessDeniedException("仅管理员可以执行该操作");
+        if (user.role() != UserRole.MERCHANT) {
+            throw new AccessDeniedException("仅商家可以执行该操作");
+        }
+        return user;
+    }
+
+    public static AuthenticatedUser requireRider() {
+        AuthenticatedUser user = require();
+        if (user.role() != UserRole.RIDER) {
+            throw new AccessDeniedException("仅骑手可以执行该操作");
+        }
+        return user;
+    }
+
+    public static AuthenticatedUser requireCustomer() {
+        AuthenticatedUser user = require();
+        if (user.role() != UserRole.CUSTOMER) {
+            throw new AccessDeniedException("仅顾客可以执行该操作");
         }
         return user;
     }

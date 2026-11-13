@@ -1,5 +1,6 @@
 package com.dandanyun.controller.user;
 
+import com.dandanyun.auth.AuthContext;
 import com.dandanyun.common.PageResult;
 import com.dandanyun.common.Result;
 import com.dandanyun.order.H5OrderRequest;
@@ -25,13 +26,13 @@ public class H5Controller {
     }
 
     @GetMapping("/menu")
-    public Result<Map<String, Object>> menu(@RequestParam(required = false) String tableNo) {
-        return Result.ok(orderService.menu(tableNo));
+    public Result<Map<String, Object>> menu(@RequestParam(required = false) Long shopId) {
+        return Result.ok(orderService.menu(shopId));
     }
 
     @PostMapping("/order")
     public Result<Map<String, Object>> submit(@RequestBody H5OrderRequest request) {
-        return Result.ok(orderService.submit(request));
+        return Result.ok(orderService.submit(AuthContext.requireCustomer().id(), request));
     }
 
     @GetMapping("/order/{id}")
@@ -44,6 +45,10 @@ public class H5Controller {
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int pageSize
     ) {
-        return Result.ok(orderService.page(null, null, null, null, null, page, pageSize));
+        return Result.ok(orderService.customerOrders(
+                AuthContext.requireCustomer().id(),
+                page,
+                pageSize
+        ));
     }
 }

@@ -45,10 +45,34 @@ public class OrderService {
         this.objectMapper = objectMapper;
     }
 
-    public Map<String, Object> menu(String tableNo) {
+    public Map<String, Object> menu(Long shopId) {
+        Long resolvedShopId = shopId;
+        if (resolvedShopId == null) {
+            List<Long> ids = jdbc.query(
+                    "SELECT id FROM shop WHERE status = 1 AND open_menu = 1 ORDER BY rating DESC LIMIT 1",
+                    Map.of(),
+                    (rs, rowNum) -> rs.getLong("id")
+            );
+            resolvedShopId = ids.isEmpty() ? null : ids.getFirst();
+        }
+        if (resolvedShopId == null) {
+            throw new BusinessException(4004, "暂无可点餐店铺");
+        }
+        Map<String, Object> params = Map.of("shopId", resolvedShopId);
+        Map<String, Object> shop = jdbc.queryForMap(
+                "SELECT id, name, delivery_fee, delivery_time, status, open_menu FROM shop WHERE id = :shopId",
+                params
+        );
+        if (((Number) shop.get("status")).intValue() != 1
+                || ((Number) shop.get("open_menu")).intValue() != 1) {
+            throw new BusinessException(4001, "该店铺暂时无法点餐");
+        }
         List<Map<String, Object>> categories = jdbc.query(
-                "SELECT id, name FROM category WHERE type = 1 AND status = 1 ORDER BY sort_no, id",
-                Map.of(),
+                "SELECT DISTINCT c.id, c.name, c.sort_no FROM category c "
+                        + "JOIN dish d ON d.category_id = c.id "
+                        + "WHERE d.shop_id = :shopId AND c.status = 1 AND d.status = 1 "
+                        + "ORDER BY c.sort_no, c.id",
+                params,
                 (rs, rowNum) -> {
                     Map<String, Object> row = new LinkedHashMap<>();
                     row.put("id", rs.getLong("id"));
@@ -59,8 +83,9 @@ public class OrderService {
         List<Map<String, Object>> dishes = jdbc.query(
                 "SELECT d.id, d.name, d.category_id, d.price, d.image, d.description, d.flavors_json "
                         + "FROM dish d JOIN category c ON c.id = d.category_id "
-                        + "WHERE d.status = 1 AND c.status = 1 AND c.type = 1 ORDER BY c.sort_no, d.id",
-                Map.of(),
+                        + "WHERE d.shop_id = :shopId AND d.status = 1 AND c.status = 1 "
+                        + "ORDER BY c.sort_no, d.id",
+                params,
                 (rs, rowNum) -> {
                     Map<String, Object> row = new LinkedHashMap<>();
                     row.put("id", rs.getLong("id"));
@@ -73,15 +98,34 @@ public class OrderService {
                     return row;
                 }
         );
-        return Map.of("categories", categories, "dishes", dishes, "tableNo", tableNo == null ? "" : tableNo);
+        return Map.of(
+                "shop", shopMap(shop),
+                "categories", categories,
+                "dishes", dishes
+        );
     }
 
     @Transactional
-    public Map<String, Object> submit(H5OrderRequest request) {
-        if (request == null || request.items() == null || request.items().isEmpty()) {
+    public Map<String, Object> submit(Long customerId, H5OrderRequest request) {
+        if (request == null || request.shopId() == null || request.addressId() == null) {
+            throw new BusinessException(1001, "请选择店铺和收货地址");
+        }
+        if (request.items() == null || request.items().isEmpty()) {
             throw new BusinessException(1001, "订单里没有有效菜品");
         }
-        String tableNo = hasText(request.tableNo()) ? request.tableNo().trim() : "3 号桌";
+        Map<String, Object> shop = jdbc.queryForMap(
+                "SELECT id, name, min_price, delivery_fee, status, open_menu FROM shop WHERE id = :id",
+                Map.of("id", request.shopId())
+        );
+        if (((Number) shop.get("status")).intValue() != 1
+                || ((Number) shop.get("open_menu")).intValue() != 1) {
+            throw new BusinessException(4001, "该店铺暂时无法点餐");
+        }
+        Map<String, Object> address = jdbc.queryForMap(
+                "SELECT id, tag, name, phone, detail FROM address "
+                        + "WHERE id = :id AND user_id = :userId",
+                Map.of("id", request.addressId(), "userId", customerId)
+        );
         List<Map<String, Object>> items = new ArrayList<>();
         BigDecimal amount = BigDecimal.ZERO;
         for (H5OrderRequest.Item item : request.items()) {
@@ -93,8 +137,9 @@ public class OrderService {
                 throw new BusinessException(1001, "菜品数量需要在 1 到 20 之间");
             }
             List<Map<String, Object>> dishes = jdbc.query(
-                    "SELECT id, name, price FROM dish WHERE id = :id AND status = 1",
-                    Map.of("id", item.dishId()),
+                    "SELECT id, name, price FROM dish "
+                            + "WHERE id = :id AND shop_id = :shopId AND status = 1",
+                    Map.of("id", item.dishId(), "shopId", request.shopId()),
                     (rs, rowNum) -> Map.of(
                             "id", rs.getLong("id"),
                             "name", rs.getString("name"),
@@ -102,7 +147,7 @@ public class OrderService {
                     )
             );
             if (dishes.isEmpty()) {
-                throw new BusinessException(4001, "菜品已下架或不存在");
+                throw new BusinessException(4001, "菜品已下架或不属于该店铺");
             }
             Map<String, Object> dish = dishes.getFirst();
             BigDecimal unitPrice = (BigDecimal) dish.get("price");
@@ -130,22 +175,38 @@ public class OrderService {
             throw new BusinessException(1001, "订单里没有有效菜品");
         }
         amount = amount.setScale(2, RoundingMode.HALF_UP);
-        BigDecimal packFee = tableNo.contains("打包") ? new BigDecimal("2.00") : BigDecimal.ZERO;
-        BigDecimal totalAmount = amount.add(packFee).setScale(2, RoundingMode.HALF_UP);
+        BigDecimal minPrice = (BigDecimal) shop.get("min_price");
+        if (amount.compareTo(minPrice) < 0) {
+            throw new BusinessException(4001, "未达到店铺起送价 ¥" + minPrice);
+        }
+        BigDecimal deliveryFee = (BigDecimal) shop.get("delivery_fee");
+        BigDecimal totalAmount = amount.add(deliveryFee).setScale(2, RoundingMode.HALF_UP);
         LocalDateTime now = LocalDateTime.now();
         String orderNo = "DC" + now.format(DateTimeFormatter.ofPattern("yyMMddHHmmss"))
                 + String.format("%03d", ThreadLocalRandom.current().nextInt(1000));
         KeyHolder keyHolder = new GeneratedKeyHolder();
         jdbc.update(
-                "INSERT INTO orders(order_no, user_name, phone, table_no, address, amount, pack_fee, "
-                        + "total_amount, remark, pay_status, status, created_at, updated_at) "
-                        + "VALUES(:orderNo, '顾客', '13800000000', :tableNo, '', :amount, :packFee, "
-                        + ":totalAmount, :remark, 'UNPAID', 'PENDING', :createdAt, :createdAt)",
+                "INSERT INTO orders(order_no, user_name, phone, customer_id, shop_id, shop_name, "
+                        + "address, address_name, address_phone, address_detail, address_tag, "
+                        + "amount, delivery_fee, pack_fee, total_amount, remark, pay_status, status, "
+                        + "created_at, updated_at) VALUES(:orderNo, :userName, :phone, :customerId, "
+                        + ":shopId, :shopName, :address, :addressName, :addressPhone, :addressDetail, "
+                        + ":addressTag, :amount, :deliveryFee, 0, :totalAmount, :remark, 'PAID', "
+                        + "'PENDING', :createdAt, :createdAt)",
                 new MapSqlParameterSource()
                         .addValue("orderNo", orderNo)
-                        .addValue("tableNo", tableNo)
+                        .addValue("userName", address.get("name"))
+                        .addValue("phone", address.get("phone"))
+                        .addValue("customerId", customerId)
+                        .addValue("shopId", shop.get("id"))
+                        .addValue("shopName", shop.get("name"))
+                        .addValue("address", address.get("detail"))
+                        .addValue("addressName", address.get("name"))
+                        .addValue("addressPhone", address.get("phone"))
+                        .addValue("addressDetail", address.get("detail"))
+                        .addValue("addressTag", address.get("tag"))
                         .addValue("amount", amount)
-                        .addValue("packFee", packFee)
+                        .addValue("deliveryFee", deliveryFee)
                         .addValue("totalAmount", totalAmount)
                         .addValue("remark", blankToEmpty(request.remark()))
                         .addValue("createdAt", now),
@@ -180,6 +241,32 @@ public class OrderService {
             int page,
             int pageSize
     ) {
+        return queryPage(orderNo, phone, status, startTime, endTime, null, null, page, pageSize);
+    }
+
+    public PageResult<Map<String, Object>> customerOrders(Long customerId, int page, int pageSize) {
+        return queryPage(null, null, null, null, null, customerId, null, page, pageSize);
+    }
+
+    public PageResult<Map<String, Object>> riderTasks(int page, int pageSize) {
+        return queryPage(null, null, "ACCEPTED", null, null, null, "UNASSIGNED", page, pageSize);
+    }
+
+    public PageResult<Map<String, Object>> riderOrders(Long riderId, String status, int page, int pageSize) {
+        return queryPage(null, null, status, null, null, null, "RIDER:" + riderId, page, pageSize);
+    }
+
+    private PageResult<Map<String, Object>> queryPage(
+            String orderNo,
+            String phone,
+            String status,
+            String startTime,
+            String endTime,
+            Long customerId,
+            String riderFilter,
+            int page,
+            int pageSize
+    ) {
         int safePage = Math.max(page, 1);
         int safeSize = Math.min(Math.max(pageSize, 1), 500);
         MapSqlParameterSource params = new MapSqlParameterSource();
@@ -205,18 +292,26 @@ public class OrderService {
             where.append(" AND o.created_at <= :endTime");
             params.addValue("endTime", parseDateTime(endTime, true));
         }
+        if (customerId != null) {
+            where.append(" AND o.customer_id = :customerId");
+            params.addValue("customerId", customerId);
+        }
+        if ("UNASSIGNED".equals(riderFilter)) {
+            where.append(" AND o.rider_id IS NULL");
+        } else if (riderFilter != null && riderFilter.startsWith("RIDER:")) {
+            where.append(" AND o.rider_id = :riderId");
+            params.addValue("riderId", Long.parseLong(riderFilter.substring(6)));
+        }
         long total = jdbc.queryForObject("SELECT COUNT(*) FROM orders o " + where, params, Long.class);
         params.addValue("limit", safeSize).addValue("offset", (safePage - 1) * safeSize);
-        List<Map<String, Object>> records = jdbc.query(
+        List<Long> ids = jdbc.query(
                 "SELECT o.id FROM orders o " + where
                         + " ORDER BY o.created_at DESC, o.id DESC LIMIT :limit OFFSET :offset",
                 params,
-                (rs, rowNum) -> Map.of("id", rs.getLong("id"))
+                (rs, rowNum) -> rs.getLong("id")
         );
-        List<Map<String, Object>> fullRecords = records.stream()
-                .map(row -> find(((Number) row.get("id")).longValue()))
-                .toList();
-        return new PageResult<>(total, fullRecords, safePage, safeSize);
+        List<Map<String, Object>> records = ids.stream().map(this::find).toList();
+        return new PageResult<>(total, records, safePage, safeSize);
     }
 
     public Map<String, Object> statusCount() {
@@ -239,7 +334,61 @@ public class OrderService {
     }
 
     @Transactional
-    public Map<String, Object> changeStatus(Long id, String nextStatus) {
+    public Map<String, Object> merchantChangeStatus(Long id, String nextStatus) {
+        if (!Set.of("ACCEPTED", "CANCELED").contains(nextStatus)) {
+            throw new BusinessException(4001, "商家端仅可以接单或取消订单");
+        }
+        return transition(id, nextStatus, null);
+    }
+
+    @Transactional
+    public Map<String, Object> riderGrab(Long riderId, Long orderId) {
+        Map<String, Object> rider = jdbc.queryForMap(
+                "SELECT id, display_name, phone, status, online FROM sys_user "
+                        + "WHERE id = :id AND role = 'RIDER'",
+                Map.of("id", riderId)
+        );
+        if (((Number) rider.get("status")).intValue() != 1
+                || ((Number) rider.get("online")).intValue() != 1) {
+            throw new BusinessException(4001, "骑手当前未上线接单");
+        }
+        int changed = jdbc.update(
+                "UPDATE orders SET rider_id = :riderId, rider_name = :riderName, "
+                        + "rider_phone = :riderPhone, status = 'DELIVERING', updated_at = CURRENT_TIMESTAMP "
+                        + "WHERE id = :orderId AND status = 'ACCEPTED' AND rider_id IS NULL",
+                new MapSqlParameterSource()
+                        .addValue("riderId", riderId)
+                        .addValue("riderName", rider.get("display_name"))
+                        .addValue("riderPhone", rider.get("phone"))
+                        .addValue("orderId", orderId)
+        );
+        if (changed == 0) {
+            throw new BusinessException(4001, "订单已被其他骑手抢走或状态不允许");
+        }
+        addTimeline(orderId, "DELIVERING", LocalDateTime.now());
+        return find(orderId);
+    }
+
+    @Transactional
+    public Map<String, Object> riderFinish(Long riderId, Long orderId) {
+        int changed = jdbc.update(
+                "UPDATE orders SET status = 'DONE', updated_at = CURRENT_TIMESTAMP "
+                        + "WHERE id = :orderId AND rider_id = :riderId AND status = 'DELIVERING'",
+                Map.of("orderId", orderId, "riderId", riderId)
+        );
+        if (changed == 0) {
+            throw new BusinessException(4001, "订单不属于该骑手或状态不允许送达");
+        }
+        jdbc.update(
+                "UPDATE sys_user SET today_done = today_done + 1, total_done = total_done + 1 "
+                        + "WHERE id = :riderId AND role = 'RIDER'",
+                Map.of("riderId", riderId)
+        );
+        addTimeline(orderId, "DONE", LocalDateTime.now());
+        return find(orderId);
+    }
+
+    private Map<String, Object> transition(Long id, String nextStatus, Long riderId) {
         validateStatus(nextStatus);
         List<String> currentRows = jdbc.query(
                 "SELECT status FROM orders WHERE id = :id",
@@ -267,8 +416,10 @@ public class OrderService {
 
     public Map<String, Object> find(Long id) {
         List<Map<String, Object>> rows = jdbc.query(
-                "SELECT id, order_no, user_name, phone, table_no, address, amount, pack_fee, "
-                        + "total_amount, remark, pay_status, status, created_at FROM orders WHERE id = :id",
+                "SELECT id, order_no, user_name, phone, customer_id, shop_id, shop_name, table_no, "
+                        + "address, address_name, address_phone, address_detail, address_tag, "
+                        + "amount, delivery_fee, pack_fee, total_amount, remark, pay_status, status, "
+                        + "rider_id, rider_name, rider_phone, created_at FROM orders WHERE id = :id",
                 Map.of("id", id),
                 (rs, rowNum) -> {
                     Map<String, Object> row = new LinkedHashMap<>();
@@ -276,14 +427,27 @@ public class OrderService {
                     row.put("orderNo", rs.getString("order_no"));
                     row.put("userName", rs.getString("user_name"));
                     row.put("phone", rs.getString("phone"));
+                    row.put("customerId", rs.getObject("customer_id"));
+                    row.put("shopId", rs.getObject("shop_id"));
+                    row.put("shopName", rs.getString("shop_name"));
                     row.put("tableNo", rs.getString("table_no"));
                     row.put("address", rs.getString("address"));
+                    row.put("addressInfo", Map.of(
+                            "name", rs.getString("address_name"),
+                            "phone", rs.getString("address_phone"),
+                            "detail", rs.getString("address_detail"),
+                            "tag", rs.getString("address_tag")
+                    ));
                     row.put("amount", rs.getBigDecimal("amount"));
+                    row.put("deliveryFee", rs.getBigDecimal("delivery_fee"));
                     row.put("packFee", rs.getBigDecimal("pack_fee"));
                     row.put("totalAmount", rs.getBigDecimal("total_amount"));
                     row.put("remark", rs.getString("remark"));
                     row.put("payStatus", rs.getString("pay_status"));
                     row.put("status", rs.getString("status"));
+                    row.put("riderId", rs.getObject("rider_id"));
+                    row.put("riderName", rs.getString("rider_name"));
+                    row.put("riderPhone", rs.getString("rider_phone"));
                     row.put("createdAt", toLocalDateTime(rs.getTimestamp("created_at")));
                     return row;
                 }
@@ -316,6 +480,15 @@ public class OrderService {
                 )
         ));
         return order;
+    }
+
+    private Map<String, Object> shopMap(Map<String, Object> row) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("id", row.get("id"));
+        result.put("name", row.get("name"));
+        result.put("deliveryFee", row.get("delivery_fee"));
+        result.put("deliveryTime", row.get("delivery_time"));
+        return result;
     }
 
     private void addTimeline(Long orderId, String status, LocalDateTime time) {

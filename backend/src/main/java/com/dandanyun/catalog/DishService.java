@@ -3,6 +3,7 @@ package com.dandanyun.catalog;
 import com.dandanyun.common.BusinessException;
 import com.dandanyun.common.PageResult;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
@@ -25,10 +26,16 @@ public class DishService {
 
     private final NamedParameterJdbcTemplate jdbc;
     private final ObjectMapper objectMapper;
+    private final long merchantShopId;
 
-    public DishService(NamedParameterJdbcTemplate jdbc, ObjectMapper objectMapper) {
+    public DishService(
+            NamedParameterJdbcTemplate jdbc,
+            ObjectMapper objectMapper,
+            @Value("${app.merchant-shop-id:10001}") long merchantShopId
+    ) {
         this.jdbc = jdbc;
         this.objectMapper = objectMapper;
+        this.merchantShopId = merchantShopId;
     }
 
     public PageResult<Map<String, Object>> page(
@@ -41,7 +48,8 @@ public class DishService {
         int safePage = Math.max(page, 1);
         int safeSize = Math.min(Math.max(pageSize, 1), 200);
         MapSqlParameterSource params = new MapSqlParameterSource();
-        StringBuilder where = new StringBuilder(" WHERE 1=1");
+        StringBuilder where = new StringBuilder(" WHERE d.shop_id = :merchantShopId");
+        params.addValue("merchantShopId", merchantShopId);
         if (hasText(name)) {
             where.append(" AND d.name LIKE :name");
             params.addValue("name", "%" + name.trim() + "%");
@@ -78,9 +86,9 @@ public class DishService {
         ensureDishCategory(request.categoryId());
         KeyHolder keyHolder = new GeneratedKeyHolder();
         jdbc.update(
-                "INSERT INTO dish(name, category_id, price, image, description, status, flavors_json) "
-                        + "VALUES(:name, :categoryId, :price, :image, :description, :status, :flavorsJson)",
-                params(request),
+                "INSERT INTO dish(name, category_id, shop_id, price, image, description, status, flavors_json) "
+                        + "VALUES(:name, :categoryId, :shopId, :price, :image, :description, :status, :flavorsJson)",
+                params(request).addValue("shopId", merchantShopId),
                 keyHolder,
                 new String[]{"id"}
         );
@@ -110,7 +118,10 @@ public class DishService {
     public boolean delete(Long id) {
         int changed;
         try {
-            changed = jdbc.update("DELETE FROM dish WHERE id = :id", Map.of("id", id));
+            changed = jdbc.update(
+                    "DELETE FROM dish WHERE id = :id AND shop_id = :shopId",
+                    Map.of("id", id, "shopId", merchantShopId)
+            );
         } catch (DataIntegrityViolationException e) {
             throw new BusinessException(4001, "该菜品已被套餐引用，无法删除");
         }
@@ -123,8 +134,9 @@ public class DishService {
     public boolean changeStatus(Long id, int status) {
         normalizeStatus(status);
         int changed = jdbc.update(
-                "UPDATE dish SET status = :status, updated_at = CURRENT_TIMESTAMP WHERE id = :id",
-                Map.of("id", id, "status", status)
+                "UPDATE dish SET status = :status, updated_at = CURRENT_TIMESTAMP "
+                        + "WHERE id = :id AND shop_id = :shopId",
+                Map.of("id", id, "status", status, "shopId", merchantShopId)
         );
         if (changed == 0) {
             throw new BusinessException(4004, "菜品不存在");
@@ -136,8 +148,9 @@ public class DishService {
         List<Map<String, Object>> rows = jdbc.query(
                 "SELECT d.id, d.name, d.category_id, c.name AS category_name, d.price, "
                         + "d.image, d.description, d.status, d.flavors_json, d.updated_at "
-                        + "FROM dish d JOIN category c ON c.id = d.category_id WHERE d.id = :id",
-                Map.of("id", id),
+                        + "FROM dish d JOIN category c ON c.id = d.category_id "
+                        + "WHERE d.id = :id AND d.shop_id = :shopId",
+                Map.of("id", id, "shopId", merchantShopId),
                 (rs, rowNum) -> dishMap(rs)
         );
         if (rows.isEmpty()) {

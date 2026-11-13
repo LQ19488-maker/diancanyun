@@ -3,6 +3,7 @@ package com.dandanyun.catalog;
 import com.dandanyun.common.BusinessException;
 import com.dandanyun.common.PageResult;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
@@ -21,9 +22,14 @@ import java.util.Map;
 public class ComboService {
 
     private final NamedParameterJdbcTemplate jdbc;
+    private final long merchantShopId;
 
-    public ComboService(NamedParameterJdbcTemplate jdbc) {
+    public ComboService(
+            NamedParameterJdbcTemplate jdbc,
+            @Value("${app.merchant-shop-id:10001}") long merchantShopId
+    ) {
         this.jdbc = jdbc;
+        this.merchantShopId = merchantShopId;
     }
 
     public PageResult<Map<String, Object>> page(
@@ -36,7 +42,8 @@ public class ComboService {
         int safePage = Math.max(page, 1);
         int safeSize = Math.min(Math.max(pageSize, 1), 200);
         MapSqlParameterSource params = new MapSqlParameterSource();
-        StringBuilder where = new StringBuilder(" WHERE 1=1");
+        StringBuilder where = new StringBuilder(" WHERE b.shop_id = :merchantShopId");
+        params.addValue("merchantShopId", merchantShopId);
         if (hasText(name)) {
             where.append(" AND b.name LIKE :name");
             params.addValue("name", "%" + name.trim() + "%");
@@ -77,9 +84,9 @@ public class ComboService {
         ensureDishes(request.dishIds());
         KeyHolder keyHolder = new GeneratedKeyHolder();
         jdbc.update(
-                "INSERT INTO combo(name, category_id, price, image, description, status) "
-                        + "VALUES(:name, :categoryId, :price, :image, :description, :status)",
-                comboParams(request),
+                "INSERT INTO combo(name, category_id, shop_id, price, image, description, status) "
+                        + "VALUES(:name, :categoryId, :shopId, :price, :image, :description, :status)",
+                comboParams(request).addValue("shopId", merchantShopId),
                 keyHolder,
                 new String[]{"id"}
         );
@@ -114,7 +121,10 @@ public class ComboService {
     public boolean delete(Long id) {
         int changed;
         try {
-            changed = jdbc.update("DELETE FROM combo WHERE id = :id", Map.of("id", id));
+            changed = jdbc.update(
+                    "DELETE FROM combo WHERE id = :id AND shop_id = :shopId",
+                    Map.of("id", id, "shopId", merchantShopId)
+            );
         } catch (DataIntegrityViolationException e) {
             throw new BusinessException(4001, "该套餐已被订单使用，无法删除");
         }
@@ -127,8 +137,9 @@ public class ComboService {
     public boolean changeStatus(Long id, int status) {
         normalizeStatus(status);
         int changed = jdbc.update(
-                "UPDATE combo SET status = :status, updated_at = CURRENT_TIMESTAMP WHERE id = :id",
-                Map.of("id", id, "status", status)
+                "UPDATE combo SET status = :status, updated_at = CURRENT_TIMESTAMP "
+                        + "WHERE id = :id AND shop_id = :shopId",
+                Map.of("id", id, "status", status, "shopId", merchantShopId)
         );
         if (changed == 0) {
             throw new BusinessException(4004, "套餐不存在");
@@ -140,8 +151,9 @@ public class ComboService {
         List<Map<String, Object>> rows = jdbc.query(
                 "SELECT b.id, b.name, b.category_id, c.name AS category_name, b.price, "
                         + "b.image, b.description, b.status, b.updated_at "
-                        + "FROM combo b JOIN category c ON c.id = b.category_id WHERE b.id = :id",
-                Map.of("id", id),
+                        + "FROM combo b JOIN category c ON c.id = b.category_id "
+                        + "WHERE b.id = :id AND b.shop_id = :shopId",
+                Map.of("id", id, "shopId", merchantShopId),
                 (rs, rowNum) -> comboMap(rs)
         );
         if (rows.isEmpty()) {
@@ -189,8 +201,8 @@ public class ComboService {
 
     private void ensureDishes(List<Long> dishIds) {
         Long count = jdbc.queryForObject(
-                "SELECT COUNT(*) FROM dish WHERE id IN (:ids)",
-                Map.of("ids", dishIds),
+                "SELECT COUNT(*) FROM dish WHERE id IN (:ids) AND shop_id = :shopId",
+                Map.of("ids", dishIds, "shopId", merchantShopId),
                 Long.class
         );
         if (count == null || count != dishIds.size()) {

@@ -17,7 +17,7 @@ class JwtTokenServiceTest {
     @Test
     void issuesAndVerifiesToken() {
         JwtTokenService service = service();
-        AuthenticatedUser user = new AuthenticatedUser(1, "admin", "系统管理员", UserRole.ADMIN);
+        AuthenticatedUser user = new AuthenticatedUser(1, "merchant", "商家", UserRole.MERCHANT);
 
         JwtTokenService.IssuedToken issued = service.issue(user);
         JwtTokenService.ParsedToken parsed = service.parse(issued.value());
@@ -32,7 +32,7 @@ class JwtTokenServiceTest {
     void rejectsTamperedToken() {
         JwtTokenService service = service();
         String token = service.issue(
-                new AuthenticatedUser(1, "admin", "系统管理员", UserRole.ADMIN)
+                new AuthenticatedUser(1, "merchant", "商家", UserRole.MERCHANT)
         ).value();
         String[] parts = token.split("\\.");
         parts[1] = (parts[1].startsWith("A") ? "B" : "A") + parts[1].substring(1);

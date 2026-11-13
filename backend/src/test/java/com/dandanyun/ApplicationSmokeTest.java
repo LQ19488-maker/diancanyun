@@ -61,41 +61,47 @@ class ApplicationSmokeTest {
 
     @Test
     void frontendCompatibilityPathsArePublic() throws Exception {
+        mockMvc.perform(get("/user/shops"))
+                .andExpect(status().isServiceUnavailable());
         mockMvc.perform(get("/user/menu"))
                 .andExpect(status().isServiceUnavailable());
 
-        mockMvc.perform(post("/admin/login")
+        mockMvc.perform(post("/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"username\":\"admin\",\"password\":\"admin1234\"}"))
+                        .content("{\"username\":\"merchant\",\"password\":\"merchant1234\"}"))
                 .andExpect(status().isServiceUnavailable());
     }
 
     @Test
-    void staffTokenCanReachSharedAdminPages() throws Exception {
-        String staffToken = tokenService.issue(
-                new AuthenticatedUser(1004, "staff", "员工账号", UserRole.STAFF)
+    void riderTokenCanReachRiderPortal() throws Exception {
+        String riderToken = tokenService.issue(
+                new AuthenticatedUser(1002, "rider", "王小明", UserRole.RIDER)
         ).value();
 
-        mockMvc.perform(get("/admin/dish/page")
-                        .header("Authorization", "Bearer " + staffToken))
+        mockMvc.perform(get("/rider/tasks")
+                        .header("Authorization", "Bearer " + riderToken))
                 .andExpect(status().isServiceUnavailable());
+
+        mockMvc.perform(get("/admin/rider/page")
+                        .header("Authorization", "Bearer " + riderToken))
+                .andExpect(status().isForbidden());
     }
 
     @Test
     void enforcesAdminAuthenticationAndH5PublicBoundary() throws Exception {
-        String adminToken = tokenService.issue(
-                new AuthenticatedUser(1, "admin", "系统管理员", UserRole.ADMIN)
+        String merchantToken = tokenService.issue(
+                new AuthenticatedUser(1001, "merchant", "刘添祺", UserRole.MERCHANT)
         ).value();
 
-        mockMvc.perform(get("/admin/me").header("Authorization", "Bearer " + adminToken))
+        mockMvc.perform(get("/admin/me").header("Authorization", "Bearer " + merchantToken))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.role").value("ADMIN"));
+                .andExpect(jsonPath("$.data.role").value("MERCHANT"));
 
-        mockMvc.perform(get("/user/me").header("Authorization", "Bearer " + adminToken))
+        mockMvc.perform(get("/user/me").header("Authorization", "Bearer " + merchantToken))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value(401));
 
-        mockMvc.perform(get("/admin/boom").header("Authorization", "Bearer " + adminToken))
+        mockMvc.perform(get("/admin/boom").header("Authorization", "Bearer " + merchantToken))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value(4001));
     }
