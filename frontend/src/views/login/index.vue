@@ -38,6 +38,7 @@
             <span class="who">{{ a.name }}</span>
           </div>
         </div>
+        <div class="note">演示环境不保存登录状态，刷新或重新打开会回到本页</div>
       </el-alert>
 
       <div class="footer">
@@ -192,6 +193,14 @@ async function onSubmit() {
 .who {
   flex: none;
   color: #a8b0be;
+}
+
+.note {
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px dashed rgba(180, 83, 9, 0.25);
+  color: #a06a1c;
+  font-size: 11px;
 }
 
 .footer {
