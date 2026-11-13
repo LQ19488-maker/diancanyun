@@ -14,7 +14,7 @@ const ok = (data) => ({ code: 200, message: 'ok', data })
 const fail = (code, message) => ({ code, message, data: null })
 
 /** 数据结构变化时改版本号，旧的 localStorage 数据自动作废 */
-const STORE_KEY = 'dcy_mock_db_v6'
+const STORE_KEY = 'dcy_mock_db_v7'
 
 function seed() {
   const now = Date.now()
@@ -22,7 +22,7 @@ function seed() {
 
   /* ---------------- 骑手 ---------------- */
   const rawRiders = [
-    ['rider', '胡粤毫', '13800001001', '中关村站', '电动车', 1, 1, 26, 2, 4.9],
+    ['rider', '王小明', '13800001001', '中关村站', '电动车', 1, 1, 26, 2, 4.9],
     ['rider2', '桂誉', '13800001002', '中关村站', '电动车', 1, 1, 21, 1, 4.8],
     ['zhangwei', '张伟', '13800001003', '五道口站', '电动车', 1, 1, 18, 0, 4.7],
     ['lina', '李娜', '13800001004', '五道口站', '摩托车', 1, 0, 12, 0, 4.6],
@@ -161,7 +161,7 @@ function seed() {
   /* ---------------- 订单 ---------------- */
   const ORDER_FLOW = ['PENDING', 'ACCEPTED', 'DELIVERING', 'DONE']
   const CUSTOMERS = [
-    ['王小明', '13800001111', '北京市海淀区中关村大街 1 号 A 座 1201'],
+    ['胡粤毫', '13800001111', '北京市海淀区中关村大街 1 号 A 座 1201'],
     ['李静', '13900002222', '北京市海淀区知春路 6 号院 3 号楼 502'],
     ['张伟', '13700003333', '北京市海淀区五道口华清嘉园 12 楼 3 单元 502'],
     ['刘敏', '13600004444', '北京市海淀区科学院南路 8 号 2 号楼 1806'],
@@ -264,8 +264,8 @@ function seed() {
 
   /* ---------------- 收货地址（演示固定属于顾客 customer）---------------- */
   const addresses = [
-    { id: '9001', userId: '9002', tag: '公司', name: '王小明', phone: '13800001111', detail: '北京市海淀区中关村大街 1 号 A 座 1201', isDefault: 1 },
-    { id: '9002', userId: '9002', tag: '家', name: '王小明', phone: '13800001111', detail: '北京市海淀区五道口华清嘉园 12 楼 3 单元 502', isDefault: 0 }
+    { id: '9001', userId: '9002', tag: '公司', name: '胡粤毫', phone: '13800001111', detail: '北京市海淀区中关村大街 1 号 A 座 1201', isDefault: 1 },
+    { id: '9002', userId: '9002', tag: '家', name: '胡粤毫', phone: '13800001111', detail: '北京市海淀区五道口华清嘉园 12 楼 3 单元 502', isDefault: 0 }
   ]
 
   return {
@@ -1101,9 +1101,9 @@ const routes = [
     url: /^\/user\/orders$/,
     handler: ({ params }) => {
       const db = load()
-      /* 演示环境只有一个顾客账号（王小明），这里按收件人过滤，保证「我的订单」只出现自己的单 */
+      /* 演示环境只有一个顾客账号（胡粤毫），这里按收件人过滤，保证「我的订单」只出现自己的单 */
       const mine = (db.orders || []).filter(
-        (o) => o.userName === '王小明' || o.phone === '13800001111' || o.addressInfo?.name === '王小明'
+        (o) => o.userName === '胡粤毫' || o.phone === '13800001111' || o.addressInfo?.name === '胡粤毫'
       )
       const rows = mine.slice().sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
       return ok(paginate(rows, params))

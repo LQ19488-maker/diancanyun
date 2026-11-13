@@ -27,6 +27,7 @@ diancanyun/
 1. 前端代码**只能**放在 `frontend/`，后端代码**只能**放在 `backend/`，根目录只放 README / docs / 配置。
 2. `node_modules/`、`dist/`、`target/` **一律不入库**（已在 `.gitignore` 里）。
 3. 改前端的人不碰 `backend/`，改后端的人不碰 `frontend/`。
+4. 团队怎么加协作者、怎么开分支和 PR，见 **[`docs/协作指引.md`](docs/协作指引.md)**（照着点就行）。
 
 ---
 
