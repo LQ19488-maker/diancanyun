@@ -265,7 +265,7 @@ interface Employee {
 |---|---|---|
 | GET | `/user/shops` | 店铺列表，入参 `keyword?,page,pageSize`；返回 `{total,records}`，每条含 `rating,monthlySales,minPrice,deliveryFee,deliveryTime,distance,status,openMenu,tags` |
 | GET | `/user/shop/{id}` | 店铺详情（菜单页头部用） |
-| GET | `/user/menu?shopId=` | 分类 + 在售菜品（含口味） |
+| GET | `/user/menu?shopId=` | 分类 + 在售菜品（含口味），**按店铺返回**；不传 shopId 时退回第一家店 |
 | GET | `/user/addresses` | 收货地址列表，按默认地址优先排序 |
 | POST | `/user/address` | 新增：`{ tag,name,phone,detail,isDefault }` |
 | PUT | `/user/address` | 编辑：`{ id, tag?,name?,phone?,detail? }` |
@@ -284,6 +284,23 @@ interface Employee {
 | `riderName` / `riderPhone` | 骑手接单后回填，顾客端据此显示「骑手正在配送」与联系电话 |
 
 > 未达起送价由后端再校验一次（返回 4001 + 提示文案），前端按钮也已提前置灰。
+
+### 3.6 多店铺：`shopId` 要挂在哪
+
+现在前端已经按「菜品属于某一家店」来写，演示数据里有两家店各有自己的菜单
+（中关村店 `8001`、外婆家·五道口店 `8002`）。后端接进来时只需补同样的维度：
+
+| 表 / 字段 | 要求 |
+|---|---|
+| `shop` 表 | 店名、评分、月售、起送价、配送费、配送时长、距离、营业状态；`id` 用字符串下发 |
+| `dish.shop_id`、`category.shop_id`、`combo.shop_id` | 必填外键，删除店铺时按业务决定禁止还是级联 |
+| `order.shop_id` | 下单落库时写入，顾客端与骑手端都靠它显示「店铺」 |
+| `/user/shops` | 列表带 `openMenu`（菜单是否已接入）；未接入的店前端显示「菜单接入中」 |
+| `/user/menu?shopId=` | 按店铺返回分类 + 在售菜品 |
+| `/admin/dish/page`、`/admin/category/page`、`/admin/combo/page`、`/admin/order/page` | 建议都支持 `shopId` 入参；演示版默认只返回 `8001`（商家后台就是一家店） |
+
+> 商家后台目前是「一家店」的视角，没有店铺切换器；要变成一家商家管多家店，
+> 需要先加「当前店铺」选择，所有后台请求带上 `shopId`，这块等后端字段定了再做。
 
 ---
 
