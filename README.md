@@ -20,7 +20,7 @@
 ```
 diancanyun/
 ├── frontend/     前端（Vue3 + Vite + Element Plus + Axios）—— LTQ 负责
-├── backend/      后端（Spring Boot 3 + MySQL + Redis）—— 后端同学负责
+├── backend/      后端（Java 25 + Spring Boot 4 + MySQL + JWT）—— 已接入
 ├── docs/         接口契约、页面清单、图表（团队共用，谁都能改）
 └── .github/      Pages 自动发布（只构建 frontend/）
 ```
@@ -89,7 +89,7 @@ VITE_USE_MOCK=true VITE_BASE=/diancanyun/ npm run build    # 演示版（CI 里�
 
 - 演示版（GitHub Pages）：push 到 `main` 且改动包含 `frontend/**` 时自动构建发布，**固定走演示数据**。
   演示版不连真实后端——HTTPS 页面请求 HTTP 接口会被浏览器拦截，这是刻意设计。
-- 真机版：后端跑在 `127.0.0.1:8080`，前端 `npm run dev` 通过代理访问；最终由 Nginx 同域反代 `/api`。
+- 真机版：后端跑在 `127.0.0.1:8080`，前端 `npm run dev` 通过 Vite 代理访问；最终由 Nginx 同域反代 `/admin`、`/user` 和 `/upload`。
 
 ## 六、给后端同学的对接说明
 

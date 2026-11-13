@@ -28,7 +28,7 @@ export default defineConfig(({ mode }) => {
       // 生产走 Nginx 同域反代（或后端已配好的 CORS）
       proxy: useMock
         ? {}
-        : ['/admin', '/user', '/upload', '/api'].reduce((acc, k) => {
+        : ['/auth', '/admin', '/rider', '/user', '/upload', '/api'].reduce((acc, k) => {
             acc[k] = { target: env.VITE_PROXY_TARGET || 'http://127.0.0.1:8080', changeOrigin: true }
             return acc
           }, {})

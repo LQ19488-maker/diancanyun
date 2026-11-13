@@ -137,7 +137,15 @@ router.beforeEach(async (to) => {
 
   if (to.meta.public) {
     // 已登录再访问登录页 → 回到各自首页（商家后台 / 骑手工作台 / 顾客点餐）
-    if (to.name === 'login' && user.isLogin) return { path: user.homePath }
+    if (to.name === 'login' && user.isLogin) {
+      // 兼容旧版本遗留的 ADMIN/STAFF token：角色无法映射首页时清掉旧会话，
+      // 否则 /login 会重定向回 /login，触发无限重定向白屏。
+      if (user.homePath === '/login') {
+        user.logout()
+      } else {
+        return { path: user.homePath }
+      }
+    }
     document.title = to.meta.title ? `${to.meta.title} · 点单云` : '点单云'
     return true
   }
