@@ -79,7 +79,9 @@ public class RiderService {
                 (rs, rowNum) -> riderMap(rs)
         );
         for (Map<String, Object> rider : records) {
-            rider.put("onTheWay", onTheWay(((Number) rider.get("id")).longValue()));
+            long riderId = ((Number) rider.get("id")).longValue();
+            rider.put("onTheWay", onTheWay(riderId));
+            rider.put("doneCount", doneCount(riderId));
         }
         return new PageResult<>(total, records, safePage, safeSize);
     }
@@ -186,6 +188,7 @@ public class RiderService {
         }
         Map<String, Object> rider = rows.getFirst();
         rider.put("onTheWay", onTheWay(id));
+        rider.put("doneCount", doneCount(id));
         return rider;
     }
 
@@ -196,15 +199,21 @@ public class RiderService {
                 Map.of(),
                 Long.class
         );
+        Long todayDone = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM orders WHERE rider_id = :id AND status = 'DONE' "
+                        + "AND DATE(updated_at) = CURRENT_DATE",
+                Map.of("id", id),
+                Long.class
+        );
         java.math.BigDecimal income = jdbc.queryForObject(
                 "SELECT COALESCE(SUM(delivery_fee), 0) FROM orders "
-                        + "WHERE rider_id = :id AND status = 'DONE' AND DATE(updated_at) = CURRENT_DATE",
+                        + "WHERE rider_id = :id AND status = 'DONE'",
                 Map.of("id", id),
                 java.math.BigDecimal.class
         );
         Map<String, Object> stats = new LinkedHashMap<>();
         stats.put("online", rider.get("online"));
-        stats.put("todayDone", rider.get("todayDone"));
+        stats.put("todayDone", todayDone == null ? 0 : todayDone);
         stats.put("onTheWay", rider.get("onTheWay"));
         stats.put("rating", rider.get("rating"));
         stats.put("totalDone", rider.get("totalDone"));
@@ -216,6 +225,15 @@ public class RiderService {
     public long onTheWay(Long riderId) {
         Long count = jdbc.queryForObject(
                 "SELECT COUNT(*) FROM orders WHERE rider_id = :id AND status = 'DELIVERING'",
+                Map.of("id", riderId),
+                Long.class
+        );
+        return count == null ? 0 : count;
+    }
+
+    public long doneCount(Long riderId) {
+        Long count = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM orders WHERE rider_id = :id AND status = 'DONE'",
                 Map.of("id", riderId),
                 Long.class
         );
