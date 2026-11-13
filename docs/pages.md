@@ -28,7 +28,7 @@
 - [x] 回车提交、按钮 loading
 - [x] 成功后写 token + 资料到 localStorage，跳 `redirect` 或 `/dashboard`
 - [x] 失败 toast 后端 `msg`
-- [x] 演示模式预填 `admin / admin1234` 并显示提示条
+- [x] 演示模式预填 `admin / admin1234`，并在提示条里列出全部演示账号（`admin`/`hyh`/`gy` 管理员、`staff` 员工），**点一下直接填入**
 - [x] 已登录访问 `/login` 自动跳工作台
 - [ ] 验证码（不做）
 

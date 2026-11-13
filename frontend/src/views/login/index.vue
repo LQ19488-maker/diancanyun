@@ -24,8 +24,20 @@
       </el-form>
 
       <el-alert v-if="isMock" type="warning" :closable="false" class="demo-tip">
-        <template #title>演示环境（无后端）</template>
-        账号 <b>admin / admin1234</b>（管理员）　或　<b>staff / staff1234</b>（员工）
+        <template #title>演示环境（点账号直接填入）</template>
+        <div class="accounts">
+          <div
+            v-for="a in accounts"
+            :key="a.username"
+            class="acc"
+            :class="{ on: form.username === a.username }"
+            @click="fill(a)"
+          >
+            <span class="role">{{ a.role }}</span>
+            <span class="cred">{{ a.username }} / {{ a.password }}</span>
+            <span class="who">{{ a.name }}</span>
+          </div>
+        </div>
       </el-alert>
 
       <div class="footer">
@@ -44,15 +56,25 @@ import { Lock, User } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
 import { IS_MOCK } from '@/api'
 import { APP_SUBTITLE, AUTHOR, GITHUB_URL } from '@/constants/app'
+import { DEMO_ACCOUNTS } from '@/constants/demoAccounts'
 
 const router = useRouter()
 const route = useRoute()
 const user = useUserStore()
 
 const isMock = IS_MOCK
+/** 演示账号列表来自 constants/demoAccounts.js，与 mock 校验共用一份 */
+const accounts = DEMO_ACCOUNTS
 const formRef = ref(null)
 const loading = ref(false)
 const form = reactive({ username: IS_MOCK ? 'admin' : '', password: IS_MOCK ? 'admin1234' : '' })
+
+/** 点账号直接填入，免得演示时手打 */
+function fill(account) {
+  form.username = account.username
+  form.password = account.password
+  formRef.value?.clearValidate()
+}
 
 const rules = {
   username: [{ required: true, message: '请输入账号', trigger: 'blur' }],
@@ -125,6 +147,51 @@ async function onSubmit() {
   margin-top: 4px;
   font-size: 12px;
   line-height: 1.7;
+}
+
+.accounts {
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.acc {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 6px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.acc:hover {
+  background: rgba(180, 83, 9, 0.08);
+}
+
+.acc.on {
+  background: rgba(180, 83, 9, 0.14);
+  font-weight: 600;
+}
+
+.role {
+  flex: none;
+  width: 52px;
+  white-space: nowrap;
+  color: #b45309;
+}
+
+.cred {
+  flex: 1;
+  font-family: Consolas, Monaco, monospace;
+  font-size: 12px;
+  color: #7c4a03;
+}
+
+.who {
+  flex: none;
+  color: #a8b0be;
 }
 
 .footer {

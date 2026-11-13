@@ -6,13 +6,15 @@
  * 绝不在这里直接返回“前端想要的形状”，否则切真接口那天要改 8 个页面。
  */
 
+import { DEMO_ACCOUNTS } from '../../constants/demoAccounts.js'
+
 const DELAY = [120, 360]
 
 const ok = (data) => ({ code: 200, message: 'ok', data })
 const fail = (code, message) => ({ code, message, data: null })
 
 /** 数据结构变化时改版本号，旧的 localStorage 数据自动作废 */
-const STORE_KEY = 'dcy_mock_db_v2'
+const STORE_KEY = 'dcy_mock_db_v3'
 
 function seed() {
   const now = Date.now()
@@ -21,6 +23,8 @@ function seed() {
   /* ---------------- 员工 ---------------- */
   const names = [
     ['admin', '刘添祺', 'ADMIN', 1],
+    ['hyh', 'HYH', 'ADMIN', 1],
+    ['gy', 'GY', 'ADMIN', 1],
     ['zhangsan', '张三', 'STAFF', 1],
     ['lisi', '李四', 'STAFF', 1],
     ['wangwu', '王五', 'STAFF', 1],
@@ -277,36 +281,45 @@ const routes = [
   /* ---------------- 认证 ---------------- */
   {
     method: 'post',
-    url: /^\/admin\/login$/, 
+    url: /^\/admin\/login$/,
     handler: ({ data }) => {
-      const { username, password } = data || {}
-      if (username === 'admin' && password === 'admin1234') {
-        return ok({
-          token: 'mock-token-admin',
-          user: { id: '1001', username: 'admin', name: '刘添祺', role: 'ADMIN' }
-        })
+      const db = load()
+      const username = String((data && data.username) || '').trim()
+      const password = String((data && data.password) || '')
+      const account = DEMO_ACCOUNTS.find((a) => a.username === username)
+      if (!account || account.password !== password) {
+        const hints = DEMO_ACCOUNTS.map((a) => `${a.username} / ${a.password}`).join('、')
+        return fail(2001, `账号或密码错误（演示账号：${hints}）`)
       }
-      if (username === 'staff' && password === 'staff1234') {
-        return ok({
-          token: 'mock-token-staff',
-          user: { id: '1002', username: 'staff', name: '员工账号', role: 'STAFF' }
-        })
-      }
-      return fail(2001, '账号或密码错误（演示账号：admin / admin1234）')
+      const row = (db.employees || []).find((e) => e.username === username)
+      return ok({
+        token: 'mock-token-' + username,
+        user: {
+          id: row ? String(row.id) : '9001',
+          username,
+          name: row ? row.name : account.name,
+          role: row ? row.role : account.role === '管理员' ? 'ADMIN' : 'STAFF'
+        }
+      })
     }
   },
   {
     method: 'get',
-    url: /^\/admin\/employee\/me$/, 
+    url: /^\/admin\/employee\/me$/,
     handler: () => {
       const token = localStorage.getItem('dcy_token') || ''
-      if (token.includes('staff')) {
-        return ok({ id: '1002', username: 'staff', name: '员工账号', role: 'STAFF' })
-      }
-      if (token.startsWith('mock-token')) {
-        return ok({ id: '1001', username: 'admin', name: '刘添祺', role: 'ADMIN' })
-      }
-      return fail(401, '登录已过期，请重新登录')
+      if (!token.startsWith('mock-token-')) return fail(401, '登录已过期，请重新登录')
+      const username = token.slice('mock-token-'.length)
+      const account = DEMO_ACCOUNTS.find((a) => a.username === username)
+      if (!account) return fail(401, '登录已过期，请重新登录')
+      const db = load()
+      const row = (db.employees || []).find((e) => e.username === username)
+      return ok({
+        id: row ? String(row.id) : '9001',
+        username,
+        name: row ? row.name : account.name,
+        role: row ? row.role : account.role === '管理员' ? 'ADMIN' : 'STAFF'
+      })
     }
   },
 

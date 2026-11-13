@@ -4,7 +4,7 @@
 
 在线演示（前端演示版，内置演示数据、无需后端）：
 `https://lq19488-maker.github.io/diancanyun/`
-演示账号：`admin / admin1234`（管理员）、`staff / staff1234`（员工）
+演示账号（登录页可直接点选填入）：`admin / admin1234`、`hyh / hyh1234`、`gy / gy1234`（均为管理员）、`staff / staff1234`（员工）
 
 ---
 
