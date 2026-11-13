@@ -36,8 +36,12 @@
         <el-divider content-position="left">顾客与配送</el-divider>
         <el-descriptions :column="1" size="small" border>
           <el-descriptions-item label="顾客">{{ order.userName }}　{{ order.phone }}</el-descriptions-item>
-          <el-descriptions-item label="桌号/方式">{{ order.tableNo || '—' }}</el-descriptions-item>
-          <el-descriptions-item v-if="order.address" label="收货地址">{{ order.address }}</el-descriptions-item>
+          <el-descriptions-item label="收货地址">{{ order.address || '—' }}</el-descriptions-item>
+          <el-descriptions-item label="配送骑手">
+            <span v-if="order.riderName">{{ order.riderName }}　{{ order.riderPhone }}</span>
+            <span v-else class="text-muted">待骑手接单</span>
+          </el-descriptions-item>
+          <el-descriptions-item v-if="order.shopName" label="下单店铺">{{ order.shopName }}</el-descriptions-item>
           <el-descriptions-item label="备注">{{ order.remark || '—' }}</el-descriptions-item>
         </el-descriptions>
 
@@ -63,7 +67,7 @@
 
         <div class="amounts">
           <div class="line"><span>菜品小计</span><span class="num">{{ formatPrice(order.amount) }}</span></div>
-          <div class="line"><span>打包费</span><span class="num">{{ formatPrice(order.packFee) }}</span></div>
+          <div class="line"><span>配送费</span><span class="num">{{ formatPrice(order.deliveryFee) }}</span></div>
           <div class="line total"><span>合计</span><span class="num">{{ formatPrice(order.totalAmount) }}</span></div>
         </div>
 
@@ -89,7 +93,7 @@
 import { computed, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import api from '@/api'
-import { ORDER_STATUS, ORDER_ACTION_LABEL, PAY_STATUS, statusOf } from '@/constants/enums'
+import { ORDER_STATUS, ORDER_ACTION_LABEL, PAY_STATUS, MERCHANT_ACTIONS, statusOf } from '@/constants/enums'
 import { formatDateTime, formatPrice } from '@/utils/format'
 
 const props = defineProps({
@@ -106,8 +110,10 @@ const order = ref(null)
 const statusMeta = computed(() => statusOf(ORDER_STATUS, order.value?.status))
 const payMeta = computed(() => statusOf(PAY_STATUS, order.value?.payStatus))
 
-/** 可执行的下一步：完全由状态机推导，页面不写魔法值 */
-const nextStatuses = computed(() => ORDER_STATUS[order.value?.status]?.next || [])
+/** 可执行的下一步：由状态机推导，并限制为商家能做的动作（配送归骑手端） */
+const nextStatuses = computed(() =>
+  (ORDER_STATUS[order.value?.status]?.next || []).filter((s) => MERCHANT_ACTIONS.includes(s))
+)
 
 function statusText(s) {
   return ORDER_STATUS[s]?.text || s

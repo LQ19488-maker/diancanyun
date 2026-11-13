@@ -1,20 +1,32 @@
 /**
  * 全站枚举与状态机常量。
  *
+ * 三大类使用者（外卖平台）：
+ *   MERCHANT 商家 · RIDER 骑手 · CUSTOMER 个人用户（顾客）
+ *
  * 原则：状态相关的文案、颜色、可执行动作只在这里定义一份，
  * 页面里禁止写 if (status === 2) 这种魔法值。
  * 后端若用数字或中文，在 api/adapters 里翻译成这里的 key 即可。
  */
 
-/** 角色 */
+/** 角色（三大类使用者） */
 export const ROLE = {
-  ADMIN: 'ADMIN',
-  STAFF: 'STAFF'
+  MERCHANT: 'MERCHANT',
+  RIDER: 'RIDER',
+  CUSTOMER: 'CUSTOMER'
 }
 
 export const ROLE_LABEL = {
-  [ROLE.ADMIN]: '管理员',
-  [ROLE.STAFF]: '员工'
+  [ROLE.MERCHANT]: '商家',
+  [ROLE.RIDER]: '骑手',
+  [ROLE.CUSTOMER]: '顾客'
+}
+
+/** 登录后各自进入的首页 */
+export const ROLE_HOME = {
+  [ROLE.MERCHANT]: '/dashboard',
+  [ROLE.RIDER]: '/rider/workbench',
+  [ROLE.CUSTOMER]: '/h5/shop'
 }
 
 /** 通用启用/停用（分类、账号等共用） */
@@ -23,15 +35,19 @@ export const ENABLE_STATUS_MAP = {
   0: { text: '停用', type: 'info' }
 }
 
-/** 账号状态 */
-export const EMPLOYEE_STATUS = {
-  ENABLED: 1,
-  DISABLED: 0
+/** 骑手接单状态：在线接单 / 休息中 */
+export const RIDER_ONLINE_MAP = {
+  1: { text: '在线接单', type: 'success' },
+  0: { text: '休息中', type: 'info' }
 }
 
-export const EMPLOYEE_STATUS_MAP = {
-  [EMPLOYEE_STATUS.ENABLED]: { text: '启用', type: 'success' },
-  [EMPLOYEE_STATUS.DISABLED]: { text: '停用', type: 'info' }
+/** 骑手车型 */
+export const VEHICLES = ['电动车', '摩托车', '自行车', '步行']
+
+/** 店铺营业状态 */
+export const SHOP_STATUS_MAP = {
+  1: { text: '营业中', type: 'success' },
+  0: { text: '休息中', type: 'info' }
 }
 
 /** 菜品/套餐售卖状态 */
@@ -46,24 +62,30 @@ export const SHELF_STATUS_MAP = {
 }
 
 /**
- * 订单状态机 —— 与后端「订单状态流转」接口保持一致。
+ * 订单状态机 —— 外卖四段式：
+ *   顾客下单 → 商家接单 → 骑手接单（配送中）→ 送达
  * next 表示当前状态下允许流转到哪些状态，页面按钮完全由它推导。
  */
 export const ORDER_STATUS = {
-  PENDING: { text: '待接单', type: 'warning', next: ['ACCEPTED', 'CANCELED'], action: '接单' },
-  ACCEPTED: { text: '已接单', type: 'primary', next: ['DELIVERING', 'CANCELED'], action: '派送' },
-  DELIVERING: { text: '派送中', type: 'primary', next: ['DONE'], action: '完成' },
-  DONE: { text: '已完成', type: 'success', next: [], action: '' },
-  CANCELED: { text: '已取消', type: 'info', next: [], action: '' }
+  PENDING: { text: '待商家接单', type: 'warning', next: ['ACCEPTED', 'CANCELED'] },
+  ACCEPTED: { text: '待骑手接单', type: 'primary', next: ['DELIVERING', 'CANCELED'] },
+  DELIVERING: { text: '配送中', type: 'primary', next: ['DONE'] },
+  DONE: { text: '已送达', type: 'success', next: [] },
+  CANCELED: { text: '已取消', type: 'info', next: [] }
 }
 
-/** 订单状态 → 目标状态的中文动作名 */
+/** 状态 → 动作文案（商家端与骑手端共用，避免文案不一致） */
 export const ORDER_ACTION_LABEL = {
   ACCEPTED: '接单',
-  DELIVERING: '开始派送',
-  DONE: '完成订单',
+  DELIVERING: '抢单配送',
+  DONE: '确认送达',
   CANCELED: '取消订单'
 }
+
+/** 商家端能做的流转（商家不做配送，配送交给骑手） */
+export const MERCHANT_ACTIONS = ['ACCEPTED', 'CANCELED']
+/** 骑手端能做的流转 */
+export const RIDER_ACTIONS = ['DELIVERING', 'DONE']
 
 /** 支付状态 */
 export const PAY_STATUS = {

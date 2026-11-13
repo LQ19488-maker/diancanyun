@@ -1,6 +1,6 @@
 /** 项目级常量：换仓库 / 换作者只改这里 */
 export const APP_NAME = '点单云'
-export const APP_SUBTITLE = '餐饮点餐管理系统 · 商家后台'
+export const APP_SUBTITLE = '外卖点餐配送平台'
 export const APP_VERSION = 'v1.0'
 export const AUTHOR = 'LTQ'
 

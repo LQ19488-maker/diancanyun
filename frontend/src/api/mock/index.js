@@ -6,7 +6,7 @@
  * 绝不在这里直接返回“前端想要的形状”，否则切真接口那天要改 8 个页面。
  */
 
-import { DEMO_ACCOUNTS } from '../../constants/demoAccounts.js'
+import { DEMO_ACCOUNTS, ACCOUNT_ROLE } from '../../constants/demoAccounts.js'
 
 const DELAY = [120, 360]
 
@@ -14,49 +14,42 @@ const ok = (data) => ({ code: 200, message: 'ok', data })
 const fail = (code, message) => ({ code, message, data: null })
 
 /** 数据结构变化时改版本号，旧的 localStorage 数据自动作废 */
-const STORE_KEY = 'dcy_mock_db_v4'
+const STORE_KEY = 'dcy_mock_db_v7'
 
 function seed() {
   const now = Date.now()
   const ago = (h) => new Date(now - h * 36e5).toISOString()
 
-  /* ---------------- 员工 ---------------- */
-  const names = [
-    ['admin', '刘添祺', 'ADMIN', 1],
-    ['hyh', '胡粤毫', 'ADMIN', 1],
-    ['gy', '桂誉', 'ADMIN', 1],
-    ['zhangsan', '张三', 'STAFF', 1],
-    ['lisi', '李四', 'STAFF', 1],
-    ['wangwu', '王五', 'STAFF', 1],
-    ['zhaoliu', '赵六', 'STAFF', 0],
-    ['sunqi', '孙七', 'STAFF', 1],
-    ['zhouba', '周八', 'STAFF', 1],
-    ['wujiu', '吴九', 'STAFF', 0],
-    ['zhengshi', '郑十', 'STAFF', 1],
-    ['chenyi', '陈一', 'STAFF', 1]
+  /* ---------------- 骑手 ---------------- */
+  const rawRiders = [
+    ['rider', '王小明', '13800001001', '中关村站', '电动车', 1, 1, 26, 2, 4.9],
+    ['rider2', '桂誉', '13800001002', '中关村站', '电动车', 1, 1, 21, 1, 4.8],
+    ['zhangwei', '张伟', '13800001003', '五道口站', '电动车', 1, 1, 18, 0, 4.7],
+    ['lina', '李娜', '13800001004', '五道口站', '摩托车', 1, 0, 12, 0, 4.6],
+    ['wangqiang', '王强', '13800001005', '望京站', '电动车', 1, 1, 30, 3, 5.0],
+    ['zhaomin', '赵敏', '13800001006', '望京站', '自行车', 1, 0, 9, 0, 4.4],
+    ['chenjie', '陈杰', '13800001007', '国贸站', '电动车', 1, 1, 24, 1, 4.8],
+    ['sunli', '孙丽', '13800001008', '国贸站', '电动车', 0, 0, 6, 0, 4.2],
+    ['zhouyang', '周洋', '13800001009', '西二旗站', '摩托车', 1, 1, 15, 2, 4.5],
+    ['wuting', '吴婷', '13800001010', '西二旗站', '电动车', 1, 0, 11, 0, 4.3]
   ]
-  const employees = names.map(([username, name, role, status], i) => ({
-    id: String(1001 + i),
-    username,
-    name,
-    phone: `1380000${String(1000 + i)}`,
-    role,
-    status,
-    lastLoginTime: ago(i * 7),
-    updateTime: ago(i * 3)
-  }))
-  for (let i = 10; i < 24; i++) {
-    employees.push({
+  const riders = rawRiders.map(
+    ([username, name, phone, area, vehicle, status, online, todayDone, onTheWay, rating], i) => ({
       id: String(1001 + i),
-      username: `staff${i}`,
-      name: `员工${i}`,
-      phone: `1390000${String(2000 + i)}`,
-      role: 'STAFF',
-      status: i % 3 === 0 ? 0 : 1,
-      lastLoginTime: ago(i * 11),
-      updateTime: ago(i * 5)
+      username,
+      code: 'R' + String(1001 + i),
+      name,
+      phone,
+      area,
+      vehicle,
+      status,
+      online,
+      todayDone,
+      onTheWay,
+      rating,
+      updateTime: ago(i * 3 + 1)
     })
-  }
+  )
 
   /* ---------------- 分类（type 1=菜品 2=套餐）---------------- */
   const rawCats = [
@@ -168,14 +161,14 @@ function seed() {
   /* ---------------- 订单 ---------------- */
   const ORDER_FLOW = ['PENDING', 'ACCEPTED', 'DELIVERING', 'DONE']
   const CUSTOMERS = [
-    ['王小明', '13800001111', '3 号桌'],
-    ['李静', '13900002222', '7 号桌'],
-    ['张伟', '13700003333', '打包带走'],
-    ['刘敏', '13600004444', '1 号桌'],
-    ['陈晨', '13500005555', '12 号桌'],
-    ['赵磊', '13400006666', '打包带走'],
-    ['孙悦', '13300007777', '5 号桌'],
-    ['周涛', '13200008888', '9 号桌']
+    ['胡粤毫', '13800001111', '北京市海淀区中关村大街 1 号 A 座 1201'],
+    ['李静', '13900002222', '北京市海淀区知春路 6 号院 3 号楼 502'],
+    ['张伟', '13700003333', '北京市海淀区五道口华清嘉园 12 楼 3 单元 502'],
+    ['刘敏', '13600004444', '北京市海淀区科学院南路 8 号 2 号楼 1806'],
+    ['陈晨', '13500005555', '北京市海淀区苏州街 20 号 B 座 907'],
+    ['赵磊', '13400006666', '北京市海淀区丹棱街 3 号 1 号楼 601'],
+    ['孙悦', '13300007777', '北京市海淀区上地十街 1 号院 5 号楼 1102'],
+    ['周涛', '13200008888', '北京市海淀区西二旗大街 10 号院 6 号楼 803']
   ]
   const pickDishes = (seed) => {
     const n = 1 + (seed % 3)
@@ -196,12 +189,13 @@ function seed() {
   }
   const orders = []
   for (let i = 0; i < 28; i++) {
-    const [userName, phone, tableNo] = CUSTOMERS[i % CUSTOMERS.length]
+    const [userName, phone, addrDetail] = CUSTOMERS[i % CUSTOMERS.length]
     const items = pickDishes(i + 1)
     const amount = Number(items.reduce((t, x) => t + x.amount, 0).toFixed(2))
-    const packFee = tableNo === '打包带走' ? 2 : 0
+    const deliveryFee = i % 2 === 0 ? 3 : 2
     // 前 20 条铺满各状态，后面几条集中在待接单，方便演示
-    const status = i < 20 ? ORDER_FLOW[i % 4] : i % 5 === 0 ? 'CANCELED' : 'PENDING'
+    // 加一个 floor(i/8) 偏移，让同一个顾客的连续几单落在不同状态上
+    const status = i < 20 ? ORDER_FLOW[(i + Math.floor(i / 8)) % 4] : i % 5 === 0 ? 'CANCELED' : 'PENDING'
     // 摊到近 30 天，趋势图才有内容
     const createdAt = new Date(now - (i * 0.85 * 86400 + 1800) * 1000).toISOString()
     const idx = ORDER_FLOW.indexOf(status)
@@ -215,17 +209,26 @@ function seed() {
     if (status === 'CANCELED') {
       timeline.push({ status: 'CANCELED', time: new Date(new Date(createdAt).getTime() + 4 * 3600000).toISOString() })
     }
+    const needRider = status === 'DELIVERING' || status === 'DONE'
+    const riderRow = needRider ? riders[i % riders.length] : null
     orders.push({
       id: String(5001 + i),
       orderNo: 'DC' + String(now).slice(-6) + String(1001 + i),
+      riderId: riderRow ? String(riderRow.id) : '',
+      riderName: riderRow ? riderRow.name : '',
+      riderPhone: riderRow ? riderRow.phone : '',
+      shopId: '8001',
+      shopName: '点单云·中关村店',
       userName,
       phone,
-      tableNo,
-      address: tableNo === '打包带走' ? '北京市海淀区中关村大街 1 号 A 座 1201' : '',
+      tableNo: '外卖配送',
+      address: addrDetail,
+      addressInfo: { name: userName, phone, detail: addrDetail, tag: i % 2 === 0 ? '公司' : '家' },
       items,
       amount,
-      packFee,
-      totalAmount: Number((amount + packFee).toFixed(2)),
+      packFee: 0,
+      deliveryFee,
+      totalAmount: Number((amount + deliveryFee).toFixed(2)),
       remark: i % 5 === 0 ? '不要香菜，少放辣' : '',
       payStatus: i % 4 === 3 ? 'UNPAID' : 'PAID',
       status,
@@ -234,9 +237,42 @@ function seed() {
     })
   }
 
+  /* ---------------- 店铺（平台视角；当前只有第一家接入了完整菜单）---------------- */
+  const rawShops = [
+    ['点单云·中关村店', 4.9, 1286, 20, 3, 32, '1.2km', '新店开业，满 30 减 5', 1, true, ['川菜', '家常菜']],
+    ['外婆家·五道口店', 4.7, 2431, 25, 4, 38, '2.4km', '招牌红烧肉第二份半价', 1, false, ['家常菜', '江浙菜']],
+    ['蜀香源·望京店', 4.6, 892, 20, 3, 41, '3.8km', '', 1, false, ['川菜', '火锅']],
+    ['轻食沙拉·国贸店', 4.8, 1560, 30, 5, 28, '0.9km', '低卡轻食，配送快', 1, false, ['轻食', '健康餐']],
+    ['老北京炸酱面·西二旗店', 4.4, 703, 15, 2, 45, '5.1km', '', 1, false, ['面食', '京菜']],
+    ['深夜食堂·中关村店', 4.9, 3210, 25, 4, 35, '1.6km', '夜宵满 50 减 10', 0, false, ['夜宵', '烧烤']]
+  ]
+  const shops = rawShops.map(([name, rating, monthlySales, minPrice, deliveryFee, deliveryTime, distance, notice, status, openMenu, tags], i) => ({
+    id: String(8001 + i),
+    name,
+    image: thumb('店', palette[i % palette.length]),
+    rating,
+    monthlySales,
+    minPrice,
+    deliveryFee,
+    deliveryTime,
+    distance,
+    notice,
+    status,
+    openMenu: Boolean(openMenu),
+    tags
+  }))
+
+  /* ---------------- 收货地址（演示固定属于顾客 customer）---------------- */
+  const addresses = [
+    { id: '9001', userId: '9002', tag: '公司', name: '胡粤毫', phone: '13800001111', detail: '北京市海淀区中关村大街 1 号 A 座 1201', isDefault: 1 },
+    { id: '9002', userId: '9002', tag: '家', name: '胡粤毫', phone: '13800001111', detail: '北京市海淀区五道口华清嘉园 12 楼 3 单元 502', isDefault: 0 }
+  ]
+
   return {
-    employees, categories, flavors, dishes, combos, orders,
-    seqEmp: 1001 + employees.length,
+    riders, categories, flavors, dishes, combos, orders, shops, addresses,
+    seqAddress: 9003,
+    seqShop: 8007,
+    seqRider: 1001 + riders.length,
     seqCat: 2001 + categories.length,
     seqDish: 3001 + dishes.length,
     seqCombo: 4001 + combos.length
@@ -281,31 +317,32 @@ const routes = [
   /* ---------------- 认证 ---------------- */
   {
     method: 'post',
-    url: /^\/admin\/login$/,
+    url: /^\/auth\/login$/,
     handler: ({ data }) => {
       const db = load()
       const username = String((data && data.username) || '').trim()
       const password = String((data && data.password) || '')
       const account = DEMO_ACCOUNTS.find((a) => a.username === username)
       if (!account || account.password !== password) {
-        const hints = DEMO_ACCOUNTS.map((a) => `${a.username} / ${a.password}`).join('、')
+        const hints = DEMO_ACCOUNTS.map((a) => `${a.username}/${a.password}`).join('、')
         return fail(2001, `账号或密码错误（演示账号：${hints}）`)
       }
-      const row = (db.employees || []).find((e) => e.username === username)
+      const role = ACCOUNT_ROLE[username] || 'CUSTOMER'
+      const rider = (db.riders || []).find((r) => r.username === username)
       return ok({
         token: 'mock-token-' + username,
         user: {
-          id: row ? String(row.id) : '9001',
+          id: rider ? String(rider.id) : role === 'MERCHANT' ? '9001' : '9002',
           username,
-          name: row ? row.name : account.name,
-          role: row ? row.role : account.role === '管理员' ? 'ADMIN' : 'STAFF'
+          name: rider ? rider.name : account.name,
+          role
         }
       })
     }
   },
   {
     method: 'get',
-    url: /^\/admin\/employee\/me$/,
+    url: /^\/auth\/me$/,
     handler: () => {
       const token = localStorage.getItem('dcy_token') || ''
       if (!token.startsWith('mock-token-')) return fail(401, '登录已过期，请重新登录')
@@ -313,27 +350,29 @@ const routes = [
       const account = DEMO_ACCOUNTS.find((a) => a.username === username)
       if (!account) return fail(401, '登录已过期，请重新登录')
       const db = load()
-      const row = (db.employees || []).find((e) => e.username === username)
+      const role = ACCOUNT_ROLE[username] || 'CUSTOMER'
+      const rider = (db.riders || []).find((r) => r.username === username)
       return ok({
-        id: row ? String(row.id) : '9001',
+        id: rider ? String(rider.id) : role === 'MERCHANT' ? '9001' : '9002',
         username,
-        name: row ? row.name : account.name,
-        role: row ? row.role : account.role === '管理员' ? 'ADMIN' : 'STAFF'
+        name: rider ? rider.name : account.name,
+        role
       })
     }
   },
 
-  /* ---------------- 员工 ---------------- */
+  /* ---------------- 骑手 ---------------- */
   {
     method: 'get',
-    url: /^\/admin\/employee\/page$/, 
+    url: /^\/admin\/rider\/page$/,
     handler: ({ params }) => {
       const db = load()
-      let rows = db.employees.slice()
-      const { name, username, role, status } = params || {}
+      let rows = (db.riders || []).slice()
+      const { name, code, area, online, status } = params || {}
       if (name) rows = rows.filter((r) => (r.name || '').includes(name))
-      if (username) rows = rows.filter((r) => (r.username || '').includes(username))
-      if (role) rows = rows.filter((r) => r.role === role)
+      if (code) rows = rows.filter((r) => (r.code || '').includes(code))
+      if (area) rows = rows.filter((r) => (r.area || '').includes(area))
+      if (notEmpty(online)) rows = rows.filter((r) => Number(r.online) === Number(online))
       if (notEmpty(status)) rows = rows.filter((r) => Number(r.status) === Number(status))
       rows.sort((a, b) => (a.updateTime < b.updateTime ? 1 : -1))
       return ok(paginate(rows, params))
@@ -341,39 +380,44 @@ const routes = [
   },
   {
     method: 'post',
-    url: /^\/admin\/employee$/, 
+    url: /^\/admin\/rider$/,
     handler: ({ data }) => {
       const db = load()
-      if (db.employees.some((r) => r.username === data.username)) {
-        return fail(4001, '账号已存在，请换一个')
-      }
+      if (db.riders.some((r) => r.phone === data.phone)) return fail(4001, '该手机号已注册骑手')
       const row = {
-        id: String(db.seqEmp++),
-        username: data.username,
-        name: data.name,
-        phone: data.phone || '',
-        role: data.role === 'ADMIN' ? 'ADMIN' : 'STAFF',
+        id: String(db.seqRider++),
+        username: (data.username || '').trim() || 'rider' + db.seqRider,
+        code: 'R' + String(db.seqRider - 1),
+        name: (data.name || '').trim(),
+        phone: String(data.phone || ''),
+        area: data.area || '',
+        vehicle: data.vehicle || '电动车',
         status: Number(data.status) === 0 ? 0 : 1,
-        lastLoginTime: null,
+        online: Number(data.online) === 1 ? 1 : 0,
+        todayDone: 0,
+        onTheWay: 0,
+        rating: 5.0,
         updateTime: new Date().toISOString()
       }
-      db.employees.unshift(row)
+      db.riders.unshift(row)
       save(db)
       return ok(row)
     }
   },
   {
     method: 'put',
-    url: /^\/admin\/employee$/, 
+    url: /^\/admin\/rider$/,
     handler: ({ data }) => {
       const db = load()
-      const row = db.employees.find((r) => String(r.id) === String(data.id))
-      if (!row) return fail(4004, '员工不存在或已被删除')
+      const row = db.riders.find((r) => String(r.id) === String(data.id))
+      if (!row) return fail(4004, '骑手不存在或已被删除')
       Object.assign(row, {
         name: data.name ?? row.name,
         phone: data.phone ?? row.phone,
-        role: data.role ?? row.role,
+        area: data.area ?? row.area,
+        vehicle: data.vehicle ?? row.vehicle,
         status: data.status === undefined ? row.status : Number(data.status),
+        online: data.online === undefined ? row.online : Number(data.online),
         updateTime: new Date().toISOString()
       })
       save(db)
@@ -382,24 +426,40 @@ const routes = [
   },
   {
     method: 'delete',
-    url: /^\/admin\/employee\/(\w+)$/, 
+    url: /^\/admin\/rider\/(\w+)$/,
     handler: ({ match }) => {
       const db = load()
-      if (match[1] === '1001') return fail(4002, '超级管理员不允许删除')
-      const before = db.employees.length
-      db.employees = db.employees.filter((r) => String(r.id) !== String(match[1]))
+      const row = db.riders.find((r) => String(r.id) === String(match[1]))
+      if (!row) return fail(4004, '骑手不存在')
+      if (Number(row.onTheWay) > 0) return fail(4001, `该骑手还有 ${row.onTheWay} 单在途，无法删除`)
+      db.riders = db.riders.filter((r) => String(r.id) !== String(match[1]))
       save(db)
-      return before === db.employees.length ? fail(4004, '员工不存在') : ok(true)
+      return ok(true)
     }
   },
   {
     method: 'put',
-    url: /^\/admin\/employee\/(\w+)\/status$/, 
+    url: /^\/admin\/rider\/(\w+)\/status$/,
     handler: ({ match, params }) => {
       const db = load()
-      const row = db.employees.find((r) => String(r.id) === String(match[1]))
-      if (!row) return fail(4004, '员工不存在')
+      const row = db.riders.find((r) => String(r.id) === String(match[1]))
+      if (!row) return fail(4004, '骑手不存在')
       row.status = Number(params?.status) === 0 ? 0 : 1
+      if (row.status === 0) row.online = 0
+      row.updateTime = new Date().toISOString()
+      save(db)
+      return ok(row)
+    }
+  },
+  {
+    method: 'put',
+    url: /^\/admin\/rider\/(\w+)\/online$/,
+    handler: ({ match, params }) => {
+      const db = load()
+      const row = db.riders.find((r) => String(r.id) === String(match[1]))
+      if (!row) return fail(4004, '骑手不存在')
+      if (Number(row.status) === 0) return fail(4001, '该骑手账号已停用，不能上线')
+      row.online = Number(params?.online) === 0 ? 0 : 1
       row.updateTime = new Date().toISOString()
       save(db)
       return ok(row)
@@ -709,7 +769,232 @@ const routes = [
     }
   },
 
+  /* ---------------- 骑手端（前缀 /rider）---------------- */
+  {
+    method: 'get',
+    url: /^\/rider\/me$/,
+    handler: () => {
+      const token = localStorage.getItem('dcy_token') || ''
+      if (!token.startsWith('mock-token-')) return fail(401, '登录已过期，请重新登录')
+      const username = token.slice('mock-token-'.length)
+      const db = load()
+      const row = (db.riders || []).find((r) => r.username === username)
+      return row ? ok(row) : fail(4004, '骑手不存在')
+    }
+  },
+  {
+    method: 'get',
+    url: /^\/rider\/tasks$/,
+    handler: ({ params }) => {
+      const db = load()
+      // 接单大厅：商家已接单、还没骑手接的
+      const rows = (db.orders || [])
+        .filter((o) => o.status === 'ACCEPTED' && !o.riderId)
+        .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
+      return ok(paginate(rows, params))
+    }
+  },
+  {
+    method: 'post',
+    url: /^\/rider\/tasks\/(\w+)\/grab$/,
+    handler: ({ match }) => {
+      const db = load()
+      const token = localStorage.getItem('dcy_token') || ''
+      const username = token.replace('mock-token-', '')
+      const me = (db.riders || []).find((r) => r.username === username)
+      if (!me) return fail(4004, '骑手不存在')
+      if (Number(me.online) !== 1) return fail(4001, '请先上线接单')
+      if (Number(me.status) !== 1) return fail(4001, '账号已停用，不能接单')
+      const row = (db.orders || []).find((o) => String(o.id) === String(match[1]))
+      if (!row) return fail(4004, '订单不存在')
+      if (row.riderId) return fail(4001, '手慢了，这单已被其他骑手接走')
+      if (row.status !== 'ACCEPTED') return fail(4001, '该订单当前不可接单')
+      row.riderId = String(me.id)
+      row.riderName = me.name
+      row.riderPhone = me.phone || ''
+      row.status = 'DELIVERING'
+      row.timeline = [...(row.timeline || []), { status: 'DELIVERING', time: new Date().toISOString() }]
+      me.onTheWay = Number(me.onTheWay || 0) + 1
+      save(db)
+      return ok(row)
+    }
+  },
+  {
+    method: 'get',
+    url: /^\/rider\/orders$/,
+    handler: ({ params }) => {
+      const db = load()
+      const token = localStorage.getItem('dcy_token') || ''
+      const username = token.replace('mock-token-', '')
+      const me = (db.riders || []).find((r) => r.username === username)
+      if (!me) return fail(4004, '骑手不存在')
+      const status = (params || {}).status
+      let rows = (db.orders || []).filter((o) => String(o.riderId) === String(me.id))
+      if (status) rows = rows.filter((o) => o.status === status)
+      rows = rows.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
+      return ok(paginate(rows, params))
+    }
+  },
+  {
+    method: 'post',
+    url: /^\/rider\/orders\/(\w+)\/finish$/,
+    handler: ({ match }) => {
+      const db = load()
+      const token = localStorage.getItem('dcy_token') || ''
+      const username = token.replace('mock-token-', '')
+      const me = (db.riders || []).find((r) => r.username === username)
+      if (!me) return fail(4004, '骑手不存在')
+      const row = (db.orders || []).find((o) => String(o.id) === String(match[1]))
+      if (!row) return fail(4004, '订单不存在')
+      if (String(row.riderId) !== String(me.id)) return fail(4003, '这不是你的配送单')
+      if (row.status !== 'DELIVERING') return fail(4001, '该订单当前不是配送中')
+      row.status = 'DONE'
+      row.timeline = [...(row.timeline || []), { status: 'DONE', time: new Date().toISOString() }]
+      me.onTheWay = Math.max(0, Number(me.onTheWay || 0) - 1)
+      me.todayDone = Number(me.todayDone || 0) + 1
+      save(db)
+      return ok(row)
+    }
+  },
+  {
+    method: 'get',
+    url: /^\/rider\/stats$/,
+    handler: () => {
+      const db = load()
+      const token = localStorage.getItem('dcy_token') || ''
+      const username = token.replace('mock-token-', '')
+      const me = (db.riders || []).find((r) => r.username === username)
+      if (!me) return fail(4004, '骑手不存在')
+      const mine = (db.orders || []).filter((o) => String(o.riderId) === String(me.id))
+      const done = mine.filter((o) => o.status === 'DONE')
+      const income = Number((done.length * 5).toFixed(2))
+      return ok({
+        online: Number(me.online),
+        todayDone: Number(me.todayDone || 0),
+        onTheWay: Number(me.onTheWay || 0),
+        rating: Number(me.rating || 5),
+        totalDone: done.length,
+        income,
+        availableTasks: (db.orders || []).filter((o) => o.status === 'ACCEPTED' && !o.riderId).length
+      })
+    }
+  },
+  {
+    method: 'put',
+    url: /^\/rider\/online$/,
+    handler: ({ params }) => {
+      const db = load()
+      const token = localStorage.getItem('dcy_token') || ''
+      const username = token.replace('mock-token-', '')
+      const me = (db.riders || []).find((r) => r.username === username)
+      if (!me) return fail(4004, '骑手不存在')
+      if (Number(me.status) !== 1) return fail(4001, '账号已停用，不能上线')
+      me.online = Number(params?.online) === 0 ? 0 : 1
+      save(db)
+      return ok(me)
+    }
+  },
+
   /* ---------------- 用户端（H5，前缀 /user）---------------- */
+  {
+    method: 'get',
+    url: /^\/user\/shops$/,
+    handler: ({ params }) => {
+      const db = load()
+      let rows = (db.shops || []).slice()
+      const kw = (params || {}).keyword
+      if (kw) {
+        rows = rows.filter(
+          (r) => r.name.includes(kw) || (r.tags || []).some((t) => t.includes(kw))
+        )
+      }
+      rows.sort((a, b) => Number(b.status) - Number(a.status) || b.rating - a.rating)
+      return ok(paginate(rows, params))
+    }
+  },
+  {
+    method: 'get',
+    url: /^\/user\/shop\/(\w+)$/,
+    handler: ({ match }) => {
+      const db = load()
+      const row = (db.shops || []).find((x) => String(x.id) === String(match[1]))
+      return row ? ok(row) : fail(4004, '店铺不存在')
+    }
+  },
+  {
+    method: 'get',
+    url: /^\/user\/addresses$/,
+    handler: () => {
+      const db = load()
+      const rows = (db.addresses || [])
+        .slice()
+        .sort((a, b) => Number(b.isDefault) - Number(a.isDefault) || (a.id < b.id ? 1 : -1))
+      return ok({ total: rows.length, records: rows })
+    }
+  },
+  {
+    method: 'post',
+    url: /^\/user\/address$/,
+    handler: ({ data }) => {
+      const db = load()
+      if (!data || !data.detail) return fail(1001, '请填写详细地址')
+      const row = {
+        id: String(db.seqAddress++),
+        userId: '9002',
+        tag: data.tag || '其他',
+        name: data.name || '',
+        phone: data.phone || '',
+        detail: data.detail,
+        isDefault: Number(data.isDefault) === 1 ? 1 : 0
+      }
+      if (row.isDefault) (db.addresses || []).forEach((a) => (a.isDefault = 0))
+      db.addresses = [...(db.addresses || []), row]
+      save(db)
+      return ok(row)
+    }
+  },
+  {
+    method: 'put',
+    url: /^\/user\/address$/,
+    handler: ({ data }) => {
+      const db = load()
+      const row = (db.addresses || []).find((a) => String(a.id) === String(data.id))
+      if (!row) return fail(4004, '地址不存在')
+      Object.assign(row, {
+        tag: data.tag ?? row.tag,
+        name: data.name ?? row.name,
+        phone: data.phone ?? row.phone,
+        detail: data.detail ?? row.detail
+      })
+      save(db)
+      return ok(row)
+    }
+  },
+  {
+    method: 'put',
+    url: /^\/user\/address\/(\w+)\/default$/,
+    handler: ({ match }) => {
+      const db = load()
+      const row = (db.addresses || []).find((a) => String(a.id) === String(match[1]))
+      if (!row) return fail(4004, '地址不存在')
+      ;(db.addresses || []).forEach((a) => (a.isDefault = String(a.id) === String(match[1]) ? 1 : 0))
+      save(db)
+      return ok(row)
+    }
+  },
+  {
+    method: 'delete',
+    url: /^\/user\/address\/(\w+)$/,
+    handler: ({ match }) => {
+      const db = load()
+      const before = (db.addresses || []).length
+      db.addresses = (db.addresses || []).filter((a) => String(a.id) !== String(match[1]))
+      save(db)
+      return before === db.addresses.length ? fail(4004, '地址不存在') : ok(true)
+    }
+  },
+
+  /* ---------------- 用户端：菜单与订单 ---------------- */
   {
     method: 'get',
     url: /^\/user\/menu$/,
@@ -754,30 +1039,42 @@ const routes = [
             quantity: qty,
             unitPrice: Number(dish.price),
             amount: Number((dish.price * qty).toFixed(2)),
-            flavors: (it.flavors || [])
-              .map((f) => (f && f.name ? `${f.name}:${f.value}` : ''))
-              .filter(Boolean)
+            flavors: (it.flavors || []).map((f) => (f && f.name ? `${f.name}:${f.value}` : '')).filter(Boolean)
           }
         })
         .filter(Boolean)
 
       if (!items.length) return fail(1001, '订单里没有有效菜品')
 
+      const addr = (db.addresses || []).find((a) => String(a.id) === String(body.addressId))
+      if (!addr) return fail(1001, '请先选择收货地址')
+
+      const shop = (db.shops || []).find((x) => String(x.id) === String(body.shopId)) || {}
       const amount = Number(items.reduce((t, x) => t + x.amount, 0).toFixed(2))
-      const tableNo = (body.tableNo || '3 号桌').trim()
-      const packFee = tableNo.includes('打包') ? 2 : 0
+      const deliveryFee = Number(shop.deliveryFee || 0)
+      if (shop.minPrice && amount < Number(shop.minPrice)) {
+        return fail(4001, `未达起送价 ¥${shop.minPrice}，还差 ¥${(Number(shop.minPrice) - amount).toFixed(2)}`)
+      }
+
       const nowIso = new Date().toISOString()
       const row = {
-        id: String(db.seqOrder || (5001 + (db.orders || []).length)),
+        id: String(db.seqOrder || 5001 + (db.orders || []).length),
         orderNo: 'DC' + String(Date.now()).slice(-6) + String((db.orders || []).length + 1001),
-        userName: '顾客',
-        phone: '13800000000',
-        tableNo,
-        address: '',
+        riderId: '',
+        riderName: '',
+        riderPhone: '',
+        shopId: String(shop.id || ''),
+        shopName: shop.name || '',
+        userName: addr.name,
+        phone: addr.phone,
+        tableNo: '外卖配送',
+        address: addr.detail,
+        addressInfo: { name: addr.name, phone: addr.phone, detail: addr.detail, tag: addr.tag },
         items,
         amount,
-        packFee,
-        totalAmount: Number((amount + packFee).toFixed(2)),
+        packFee: 0,
+        deliveryFee,
+        totalAmount: Number((amount + deliveryFee).toFixed(2)),
         remark: body.remark || '',
         payStatus: 'UNPAID',
         status: 'PENDING',
@@ -804,7 +1101,11 @@ const routes = [
     url: /^\/user\/orders$/,
     handler: ({ params }) => {
       const db = load()
-      const rows = (db.orders || []).slice().sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
+      /* 演示环境只有一个顾客账号（胡粤毫），这里按收件人过滤，保证「我的订单」只出现自己的单 */
+      const mine = (db.orders || []).filter(
+        (o) => o.userName === '胡粤毫' || o.phone === '13800001111' || o.addressInfo?.name === '胡粤毫'
+      )
+      const rows = mine.slice().sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
       return ok(paginate(rows, params))
     }
   },

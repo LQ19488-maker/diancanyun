@@ -1,13 +1,15 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import api from '@/api'
+import { ROLE, ROLE_HOME } from '@/constants/enums'
 
 const TOKEN_KEY = 'dcy_token'
 const PROFILE_KEY = 'dcy_profile'
 
 /**
- * 用户会话。
- * token 与 profile 都落 localStorage，刷新后守卫能直接恢复，不会把用户踢回登录页。
+ * 用户会话。三类使用者共用一套：
+ *   MERCHANT 商家 / RIDER 骑手 / CUSTOMER 顾客
+ * token 与资料都落 localStorage，刷新后守卫能直接恢复，不会把用户踢回登录页。
  */
 export const useUserStore = defineStore('user', () => {
   const token = ref(localStorage.getItem(TOKEN_KEY) || '')
@@ -16,7 +18,11 @@ export const useUserStore = defineStore('user', () => {
   const isLogin = computed(() => Boolean(token.value))
   const role = computed(() => profile.value?.role || '')
   const name = computed(() => profile.value?.name || profile.value?.username || '未登录')
-  const isAdmin = computed(() => role.value === 'ADMIN')
+  const isMerchant = computed(() => role.value === ROLE.MERCHANT)
+  const isRider = computed(() => role.value === ROLE.RIDER)
+  const isCustomer = computed(() => role.value === ROLE.CUSTOMER)
+  /** 该角色登录后应该去的首页 */
+  const homePath = computed(() => ROLE_HOME[role.value] || '/login')
 
   function persist() {
     if (token.value) localStorage.setItem(TOKEN_KEY, token.value)
@@ -48,5 +54,18 @@ export const useUserStore = defineStore('user', () => {
     persist()
   }
 
-  return { token, profile, isLogin, role, name, isAdmin, login, fetchProfile, logout }
+  return {
+    token,
+    profile,
+    isLogin,
+    role,
+    name,
+    isMerchant,
+    isRider,
+    isCustomer,
+    homePath,
+    login,
+    fetchProfile,
+    logout
+  }
 })

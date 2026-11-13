@@ -55,7 +55,7 @@
             </span>
             <template #dropdown>
               <el-dropdown-menu>
-                <el-dropdown-item disabled>角色：{{ user.isAdmin ? '管理员' : '员工' }}</el-dropdown-item>
+                <el-dropdown-item disabled>角色：{{ ROLE_LABEL[user.role] || user.role }}</el-dropdown-item>
                 <el-dropdown-item command="logout" divided>退出登录</el-dropdown-item>
               </el-dropdown-menu>
             </template>
@@ -78,12 +78,13 @@ import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessageBox } from 'element-plus'
 import {
-  ArrowDown, Box, Dish, Expand, Files, Fold, List, Odometer, Refresh, User
+  ArrowDown, Box, Dish, Expand, Files, Fold, List, Odometer, Refresh, User, Van
 } from '@element-plus/icons-vue'
 import { useAppStore } from '@/stores/app'
 import { useUserStore } from '@/stores/user'
-import { adminRoutes } from '@/router'
+import { merchantRoutes } from '@/router'
 import { IS_MOCK } from '@/api'
+import { ROLE_LABEL } from '@/constants/enums'
 import { APP_NAME, APP_VERSION, AUTHOR, GITHUB_URL } from '@/constants/app'
 
 const app = useAppStore()
@@ -92,14 +93,14 @@ const route = useRoute()
 const router = useRouter()
 
 /** 菜单图标映射：路由里只写名字，这里是唯一的组件来源 */
-const ICONS = { Odometer, User, Files, Dish, Box, List }
+const ICONS = { Odometer, User, Files, Dish, Box, List, Van }
 
 const isMock = IS_MOCK
 const routeKey = ref(0)
 
 /** 菜单：从路由表推导，按角色过滤，永远和路由保持一致 */
 const menus = computed(() =>
-  adminRoutes
+  merchantRoutes
     .filter((r) => r.meta?.menu)
     .filter((r) => !r.meta.roles || r.meta.roles.length === 0 || r.meta.roles.includes(user.role))
     .map((r) => ({ path: `/${r.path}`, title: r.meta.title, icon: ICONS[r.meta.icon] || Odometer }))

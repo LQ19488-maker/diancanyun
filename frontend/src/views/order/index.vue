@@ -73,6 +73,12 @@
           <span class="num">{{ formatPrice(row.totalAmount) }}</span>
         </template>
       </el-table-column>
+      <el-table-column label="配送骑手" width="110">
+        <template #default="{ row }">
+          <span v-if="row.riderName">{{ row.riderName }}</span>
+          <span v-else class="text-muted">待派单</span>
+        </template>
+      </el-table-column>
       <el-table-column label="支付" width="90">
         <template #default="{ row }">
           <StatusTag :map="PAY_STATUS" :value="row.payStatus" />
@@ -118,7 +124,7 @@ import OrderDetail from './detail-drawer.vue'
 import { useTable } from '@/composables/useTable'
 import { formatDateTime, formatPrice, maskPhone, buildDateRange } from '@/utils/format'
 import { downloadCsv } from '@/utils/csv'
-import { ORDER_STATUS, ORDER_ACTION_LABEL, PAY_STATUS } from '@/constants/enums'
+import { ORDER_STATUS, ORDER_ACTION_LABEL, PAY_STATUS, MERCHANT_ACTIONS } from '@/constants/enums'
 import api from '@/api'
 
 const ACTION_LABEL = ORDER_ACTION_LABEL
@@ -148,10 +154,10 @@ const table = useTable(api.order.page, {
 
 const summary = api.order.summary
 
-/** 当前状态下"往前推"的那个动作（取消不放列表里，避免误点） */
+/** 商家只做「接单」，配送相关动作（抢单配送/确认送达）归骑手端 */
 function forwardOf(status) {
   const next = ORDER_STATUS[status]?.next || []
-  return next.find((s) => s !== 'CANCELED') || ''
+  return next.find((s) => MERCHANT_ACTIONS.includes(s) && s !== 'CANCELED') || ''
 }
 
 async function loadCounts() {
@@ -243,17 +249,31 @@ async function onExport() {
     }
     downloadCsv(
       `订单导出-${activeStatus.value}`,
-      ['订单号', '下单时间', '顾客', '手机号', '桌号/方式', '订单内容', '菜品小计', '打包费', '合计', '支付状态', '订单状态'],
+      [
+        '订单号',
+        '下单时间',
+        '顾客',
+        '手机号',
+        '收货地址',
+        '订单内容',
+        '菜品小计',
+        '配送费',
+        '合计',
+        '配送骑手',
+        '支付状态',
+        '订单状态'
+      ],
       rows.map((r) => [
         r.orderNo,
         formatDateTime(r.createdAt),
         r.userName,
         r.phone,
-        r.tableNo,
+        r.address,
         summary(r),
         r.amount.toFixed(2),
-        r.packFee.toFixed(2),
+        r.deliveryFee.toFixed(2),
         r.totalAmount.toFixed(2),
+        r.riderName || '待派单',
         PAY_STATUS_MAP[r.payStatus]?.text || r.payStatus,
         ORDER_STATUS[r.status]?.text || r.status
       ])

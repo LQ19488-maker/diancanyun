@@ -1,5 +1,20 @@
 <template>
   <div class="menu-page">
+    <!-- 店铺头：名称、评分、起送/配送/时长 -->
+    <div v-if="cart.shop" class="shop-bar" @click="router.push('/h5/shop')">
+      <div class="s-line1">
+        <span class="s-name">{{ cart.shop.name }}</span>
+        <span class="s-more">切换店铺 ›</span>
+      </div>
+      <div class="s-line2">
+        <span>起送 ¥{{ cart.minPrice }}</span>
+        <span class="sep">|</span>
+        <span>配送 ¥{{ cart.deliveryFee }}</span>
+        <span class="sep">|</span>
+        <span>约 {{ cart.shop.deliveryTime }} 分钟</span>
+      </div>
+    </div>
+
     <!-- 分类竖排 + 菜品列表 -->
     <div class="body">
       <aside class="rail">
@@ -30,13 +45,7 @@
               </div>
               <div class="row">
                 <span class="price">¥{{ d.price.toFixed(2) }}</span>
-                <el-button
-                  type="primary"
-                  circle
-                  size="small"
-                  :icon="Plus"
-                  @click="onAdd(d)"
-                />
+                <el-button type="primary" circle size="small" :icon="Plus" @click="onAdd(d)" />
               </div>
             </div>
           </div>
@@ -51,19 +60,13 @@
         <span v-if="cart.totalCount" class="count">{{ cart.totalCount }}</span>
         <span class="amount">¥{{ cart.totalAmount.toFixed(2) }}</span>
         <span v-if="cart.isEmpty" class="tip">还没点菜</span>
+        <span v-else-if="cart.minGap > 0" class="tip">差 ¥{{ cart.minGap.toFixed(2) }} 起送</span>
       </div>
-      <el-button type="primary" :disabled="cart.isEmpty" @click="router.push('/h5/cart')">去结算</el-button>
+      <el-button type="primary" :disabled="!cart.canSubmit" @click="router.push('/h5/cart')">去结算</el-button>
     </div>
 
     <!-- 规格/口味选择 -->
-    <el-dialog
-      v-model="specVisible"
-      :title="specDish?.name"
-      width="360px"
-      :show-close="true"
-      align-center
-      class="spec-dialog"
-    >
+    <el-dialog v-model="specVisible" :title="specDish?.name" width="360px" align-center class="spec-dialog">
       <div v-if="specDish" class="spec">
         <div v-for="f in specDish.flavors" :key="f.name" class="spec-group">
           <div class="spec-name">{{ f.name }}</div>
@@ -121,7 +124,18 @@ const dishes = computed(() => allDishes.value.filter((d) => d.categoryId === act
 async function load() {
   loading.value = true
   try {
-    const { categories: cats, dishes: list } = await api.h5.menu({ tableNo: cart.tableNo })
+    // 没选过店铺（比如直接访问 #/h5/menu）就回店铺列表挑一家
+    if (!cart.shop) {
+      const res = await api.shop.shops({ page: 1, pageSize: 1 })
+      const first = res.list.find((s) => s.status && s.openMenu)
+      if (first) cart.setShop(first)
+      else {
+        ElMessage.warning('暂时没有营业中的店铺')
+        router.replace('/h5/shop')
+        return
+      }
+    }
+    const { categories: cats, dishes: list } = await api.h5.menu({ shopId: cart.shop?.id })
     categories.value = cats
     allDishes.value = list
     // 默认选中第一个"有菜"的分类，避免点进来看到空列表
@@ -167,9 +181,46 @@ onMounted(load)
   flex-direction: column;
 }
 
+.shop-bar {
+  background: #fff;
+  padding: 8px 12px;
+  border-bottom: 1px solid #eef1f6;
+  cursor: pointer;
+}
+
+.s-line1 {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.s-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1f2d3d;
+}
+
+.s-more {
+  font-size: 11px;
+  color: #1a4d8f;
+}
+
+.s-line2 {
+  margin-top: 3px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: #8c93a1;
+}
+
+.sep {
+  color: #d6dbe5;
+}
+
 .body {
   display: flex;
-  min-height: calc(100vh - 130px);
+  min-height: calc(100vh - 190px);
 }
 
 .rail {

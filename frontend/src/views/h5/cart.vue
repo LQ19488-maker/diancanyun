@@ -1,11 +1,17 @@
 <template>
   <div class="cart-page">
     <el-empty v-if="cart.isEmpty" description="购物车还是空的" :image-size="80">
-      <el-button type="primary" @click="router.push('/h5/menu')">去点餐</el-button>
+      <el-button type="primary" @click="router.push('/h5/shop')">去逛逛</el-button>
     </el-empty>
 
     <template v-else>
       <div class="pad">
+        <div v-if="cart.shop" class="shop-line">
+          <span class="s-ico">🏪</span>
+          <span class="s-name">{{ cart.shop.name }}</span>
+          <el-button link type="primary" size="small" @click="router.push('/h5/shop')">切换</el-button>
+        </div>
+
         <div class="section-title">
           已选 {{ cart.items.length }} 种 / 共 {{ cart.totalCount }} 份
           <el-button link type="danger" size="small" @click="onClear">清空</el-button>
@@ -40,14 +46,29 @@
             placeholder="口味偏好、忌口等（可留空）"
           />
         </div>
+
+        <div class="amounts">
+          <div class="a-line">
+            <span>菜品小计</span>
+            <span class="num">¥{{ cart.totalAmount.toFixed(2) }}</span>
+          </div>
+          <div class="a-line">
+            <span>配送费</span>
+            <span class="num">¥{{ cart.deliveryFee.toFixed(2) }}</span>
+          </div>
+        </div>
+
+        <div v-if="cart.minGap > 0" class="gap-tip">
+          还差 ¥{{ cart.minGap.toFixed(2) }} 起送（起送价 ¥{{ cart.minPrice }}）
+        </div>
       </div>
 
       <div class="foot">
         <div class="sum">
           <span class="text-muted">合计</span>
-          <span class="total">¥{{ cart.totalAmount.toFixed(2) }}</span>
+          <span class="total">¥{{ cart.payableAmount.toFixed(2) }}</span>
         </div>
-        <el-button type="primary" size="large" @click="goConfirm">去下单</el-button>
+        <el-button type="primary" size="large" :disabled="!cart.canSubmit" @click="goConfirm">去下单</el-button>
       </div>
     </template>
   </div>
@@ -75,6 +96,10 @@ async function onClear() {
 }
 
 function goConfirm() {
+  if (cart.minGap > 0) {
+    ElMessage.warning(`还差 ¥${cart.minGap.toFixed(2)} 才到起送价`)
+    return
+  }
   localStorage.setItem('dcy_h5_remark', remark.value)
   router.push('/h5/confirm')
 }
@@ -83,6 +108,31 @@ function goConfirm() {
 <style scoped>
 .pad {
   padding: 12px 12px 96px;
+}
+
+.shop-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #fff;
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+  font-size: 13px;
+}
+
+.s-ico {
+  font-size: 16px;
+}
+
+.s-name {
+  flex: 1;
+  min-width: 0;
+  font-weight: 600;
+  color: #1f2d3d;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .section-title {
@@ -152,6 +202,36 @@ function goConfirm() {
 
 .remark {
   margin-top: 16px;
+}
+
+.amounts {
+  margin-top: 14px;
+  background: #fff;
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+.a-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+  color: #6b7280;
+  padding: 3px 0;
+}
+
+.a-line .num {
+  color: #1f2d3d;
+  font-variant-numeric: tabular-nums;
+}
+
+.gap-tip {
+  margin-top: 10px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: #fdf4e7;
+  color: #b45309;
+  font-size: 12px;
 }
 
 .foot {

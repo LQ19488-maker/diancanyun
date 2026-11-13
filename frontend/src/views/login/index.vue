@@ -68,7 +68,8 @@ const isMock = IS_MOCK
 const accounts = DEMO_ACCOUNTS
 const formRef = ref(null)
 const loading = ref(false)
-const form = reactive({ username: IS_MOCK ? 'admin' : '', password: IS_MOCK ? 'admin1234' : '' })
+const first = DEMO_ACCOUNTS[0]
+const form = reactive({ username: IS_MOCK ? first.username : '', password: IS_MOCK ? first.password : '' })
 
 /** 点账号直接填入，免得演示时手打 */
 function fill(account) {
@@ -92,7 +93,8 @@ async function onSubmit() {
   try {
     await user.login({ username: form.username.trim(), password: form.password })
     ElMessage.success('登录成功')
-    router.replace(route.query.redirect || '/dashboard')
+    // 按角色进各自首页：商家 → 后台，骑手 → 接单大厅，顾客 → 点餐
+    router.replace(route.query.redirect || user.homePath)
   } catch (e) {
     ElMessage.error(e?.message || '登录失败')
   } finally {

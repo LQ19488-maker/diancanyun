@@ -4,13 +4,27 @@ import { adminUrl } from '../urls'
 const STATUS_SET = ['PENDING', 'ACCEPTED', 'DELIVERING', 'DONE', 'CANCELED']
 
 export function toModel(d = {}) {
+  const address = d.address ?? d.addressDetail ?? ''
   return {
     id: String(d.id ?? ''),
     orderNo: d.orderNo ?? d.order_no ?? '',
-    userName: d.userName ?? d.customerName ?? '',
-    phone: d.phone ?? '',
+    userName: d.userName ?? d.customerName ?? d.receiverName ?? '',
+    phone: d.phone ?? d.receiverPhone ?? '',
     tableNo: d.tableNo ?? d.table_no ?? '',
-    address: d.address ?? '',
+    address,
+    /* 外卖独有：店铺、配送费、收货信息、骑手 */
+    shopId: String(d.shopId ?? ''),
+    shopName: d.shopName ?? '',
+    deliveryFee: Number(d.deliveryFee ?? 0),
+    addressInfo: {
+      name: d.addressInfo?.name ?? d.receiverName ?? d.userName ?? '',
+      phone: d.addressInfo?.phone ?? d.receiverPhone ?? d.phone ?? '',
+      detail: d.addressInfo?.detail ?? address,
+      tag: d.addressInfo?.tag ?? ''
+    },
+    riderId: String(d.riderId ?? ''),
+    riderName: d.riderName ?? '',
+    riderPhone: d.riderPhone ?? '',
     items: (d.items || d.details || []).map((x) => ({
       dishId: String(x.dishId ?? x.id ?? ''),
       dishName: x.dishName ?? x.name ?? '',

@@ -7,6 +7,55 @@
 
 ---
 
+## 〇之一、三角色改造（2026-11，外卖平台）
+
+系统定位从「点餐 + 管理员/员工」改为**外卖平台的三大类使用者**：
+
+| 角色 | key | 入口 | 用的是哪套前缀 |
+|---|---|---|---|
+| 商家 | `MERCHANT` | `/#/login` → `/#/dashboard`（PC 后台） | `/admin/**` |
+| 骑手 | `RIDER` | `/#/rider/workbench`（手机尺寸） | `/rider/**` |
+| 顾客 | `CUSTOMER` | `/#/h5/*`（手机尺寸） | `/user/**` |
+| — | — | 三类共用 | `/auth/**`（登录、当前用户） |
+
+### 路径前缀（前端 `src/api/urls.js` 一处定义）
+
+```js
+AUTH_PREFIX  = '/auth'    // POST /auth/login、GET /auth/me
+ADMIN_PREFIX = '/admin'   // 商家端
+RIDER_PREFIX = '/rider'   // 骑手端
+USER_PREFIX  = '/user'    // 顾客端
+```
+
+### 订单状态机（外卖四段式，商家与骑手分工）
+
+```
+顾客下单 → PENDING(待商家接单) → ACCEPTED(待骑手接单) → DELIVERING(配送中) → DONE(已送达)
+                                    ↘ CANCELED(已取消)
+```
+
+| 动作 | 谁做 | 从 → 到 |
+|---|---|---|
+| 接单 | 商家 | `PENDING` → `ACCEPTED` |
+| 抢单配送 | 骑手 | `ACCEPTED` → `DELIVERING` |
+| 确认送达 | 骑手 | `DELIVERING` → `DONE` |
+| 取消 | 商家 | `PENDING`/`ACCEPTED` → `CANCELED` |
+
+### 骑手端新增接口（后端要补）
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | `/rider/me` | 当前骑手资料 `{id,code,name,phone,area,vehicle,status,online,todayDone,onTheWay,rating}` |
+| GET | `/rider/tasks` | 接单大厅：`status=ACCEPTED` 且未分配骑手的订单，分页 |
+| POST | `/rider/tasks/{orderId}/grab` | 抢单：分配骑手并把订单置为 `DELIVERING`；已被抢返回业务错误 |
+| GET | `/rider/orders` | 我的配送单（`riderId=当前骑手`），可按 `status` 过滤 |
+| POST | `/rider/orders/{orderId}/finish` | 确认送达 → `DONE`，并累加骑手今日完成数 |
+| GET | `/rider/stats` | `{online,todayDone,onTheWay,rating,totalDone,income,availableTasks}` |
+| PUT | `/rider/online` | 骑手自己上线/休息，入参 `online=0\|1` |
+| GET/POST/PUT/DELETE | `/admin/rider/**` | 商家侧的骑手管理（列表、新增、编辑、删除、`/{id}/status`、`/{id}/online`） |
+
+> 订单 DTO 新增两个字段：`riderId`（未接单为空串）、`riderName`。
+
 ## 〇、与 dandanyun 后端框架的对接现状（2026-11）
 
 后端代码已放在本仓库 `backend/`：Java 25 + Spring Boot 4 + MySQL + JWT。
@@ -208,14 +257,33 @@ interface Employee {
 | `DONE` | 已完成 | — |
 | `CANCELED` | 已取消 | — |
 
-### 3.5 用户端（H5，可选）
+### 3.5 顾客端（外卖 H5）
+
+前端路径前缀 `/user`（`src/api/urls.js` 的 `userUrl()`），下表按「路径后半段」列出。
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| GET | `/user/menu?tableNo=` | 分类 + 在售菜品（含口味） |
-| POST | `/user/order` | `{ tableNo, items:[{ dishId, flavors:[{name,value}], quantity }], remark }` |
-| GET | `/user/order/{id}` | 订单详情与状态 |
-| GET | `/user/orders` | 我的订单分页 |
+| GET | `/user/shops` | 店铺列表，入参 `keyword?,page,pageSize`；返回 `{total,records}`，每条含 `rating,monthlySales,minPrice,deliveryFee,deliveryTime,distance,status,openMenu,tags` |
+| GET | `/user/shop/{id}` | 店铺详情（菜单页头部用） |
+| GET | `/user/menu?shopId=` | 分类 + 在售菜品（含口味） |
+| GET | `/user/addresses` | 收货地址列表，按默认地址优先排序 |
+| POST | `/user/address` | 新增：`{ tag,name,phone,detail,isDefault }` |
+| PUT | `/user/address` | 编辑：`{ id, tag?,name?,phone?,detail? }` |
+| PUT | `/user/address/{id}/default` | 设为默认地址 |
+| DELETE | `/user/address/{id}` | 删除地址 |
+| POST | `/user/order` | 下单：`{ shopId,addressId,remark,items:[{dishId,quantity,flavors:[{name,value}]}] }` |
+| GET | `/user/order/{id}` | 订单详情：状态时间轴 + 骑手信息 + 收货信息 |
+| GET | `/user/orders` | 我的订单（只返回当前登录顾客自己的单） |
+
+**下单时后端要回填的字段**（顾客端结果页直接展示，缺了会显示成空）：
+
+| 字段 | 说明 |
+|---|---|
+| `shopName` / `deliveryFee` | 店铺名与配送费，金额口径：`totalAmount = amount + deliveryFee` |
+| `addressInfo` | `{ name, phone, detail, tag }` 下单时的地址快照，地址被改/删后历史订单不受影响 |
+| `riderName` / `riderPhone` | 骑手接单后回填，顾客端据此显示「骑手正在配送」与联系电话 |
+
+> 未达起送价由后端再校验一次（返回 4001 + 提示文案），前端按钮也已提前置灰。
 
 ---
 
