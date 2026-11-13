@@ -6,7 +6,7 @@
  * 绝不在这里直接返回“前端想要的形状”，否则切真接口那天要改 8 个页面。
  */
 
-import { DEMO_ACCOUNTS, ACCOUNT_ROLE } from '../../constants/demoAccounts.js'
+import { DEMO_ACCOUNTS, ACCOUNT_ROLE, ACCOUNT_SHOP } from '../../constants/demoAccounts.js'
 
 const DELAY = [120, 360]
 
@@ -14,7 +14,7 @@ const ok = (data) => ({ code: 200, message: 'ok', data })
 const fail = (code, message) => ({ code, message, data: null })
 
 /** 数据结构变化时改版本号，旧的 localStorage 数据自动作废 */
-const STORE_KEY = 'dcy_mock_db_v9'
+const STORE_KEY = 'dcy_mock_db_v10'
 
 function seed() {
   const now = Date.now()
@@ -144,7 +144,9 @@ function seed() {
     ['招牌菜', 1, 1, 1],
     ['家常小炒', 1, 2, 1],
     ['汤羹', 1, 3, 1],
-    ['主食', 1, 4, 1]
+    ['主食', 1, 4, 1],
+    ['单人套餐', 2, 1, 1],
+    ['双人套餐', 2, 2, 1]
   ]
   const categories2 = rawCats2.map(([name, type, sort, status], i) => ({
     id: String(2101 + i),
@@ -217,11 +219,11 @@ function seed() {
     ['孙悦', '13300007777', '北京市海淀区上地十街 1 号院 5 号楼 1102'],
     ['周涛', '13200008888', '北京市海淀区西二旗大街 10 号院 6 号楼 803']
   ]
-  const pickDishes = (seed) => {
+  const pickDishes = (seed, pool = dishes) => {
     const n = 1 + (seed % 3)
     const picked = []
     for (let k = 0; k < n; k++) {
-      const d = dishes[(seed * 3 + k * 7) % dishes.length]
+      const d = pool[(seed * 3 + k * 7) % pool.length]
       const qty = 1 + ((seed + k) % 2)
       picked.push({
         dishId: String(d.id),
@@ -237,9 +239,11 @@ function seed() {
   const orders = []
   for (let i = 0; i < 28; i++) {
     const [userName, phone, addrDetail] = CUSTOMERS[i % CUSTOMERS.length]
-    const items = pickDishes(i + 1)
+    // 每三单里有一单属于外婆家·五道口店（8002），菜品从它自己的菜单里挑
+    const isShop2 = i % 3 === 2
+    const items = pickDishes(i + 1, isShop2 ? dishes2 : dishes)
     const amount = Number(items.reduce((t, x) => t + x.amount, 0).toFixed(2))
-    const deliveryFee = i % 2 === 0 ? 3 : 2
+    const deliveryFee = isShop2 ? 4 : i % 2 === 0 ? 3 : 2
     // 前 20 条铺满各状态，后面几条集中在待接单，方便演示
     // 加一个 floor(i/8) 偏移，让同一个顾客的连续几单落在不同状态上
     const status = i < 20 ? ORDER_FLOW[(i + Math.floor(i / 8)) % 4] : i % 5 === 0 ? 'CANCELED' : 'PENDING'
@@ -268,8 +272,8 @@ function seed() {
       riderId: riderRow ? String(riderRow.id) : '',
       riderName: riderRow ? riderRow.name : '',
       riderPhone: riderRow ? riderRow.phone : '',
-      shopId: '8001',
-      shopName: '点单云·中关村店',
+      shopId: isShop2 ? '8002' : '8001',
+      shopName: isShop2 ? '外婆家·五道口店' : '点单云·中关村店',
       userName,
       phone,
       tableNo: '外卖配送',
@@ -287,6 +291,50 @@ function seed() {
       timeline
     })
   }
+
+  // 再补 4 单「最近一天内已完成」的订单：两家店在近 7 天看板上都有数据，不会是 0
+  ;[
+    ['8001', '点单云·中关村店', 3, dishes, 0.15, 0],
+    ['8001', '点单云·中关村店', 2, dishes, 0.6, 1],
+    ['8002', '外婆家·五道口店', 4, dishes2, 0.3, 2],
+    ['8002', '外婆家·五道口店', 4, dishes2, 0.9, 3]
+  ].forEach(([shopId, shopName, deliveryFee, pool, daysAgo], k) => {
+    const base = now - daysAgo * 86400000
+    const at = (min) => new Date(base + min * 60000).toISOString()
+    const items = pickDishes(40 + k, pool)
+    const amount = Number(items.reduce((t, x) => t + x.amount, 0).toFixed(2))
+    const [userName, phone, addrDetail] = CUSTOMERS[(k + 2) % CUSTOMERS.length]
+    const riderRow = riders[(k + 1) % riders.length]
+    orders.unshift({
+      id: String(5101 + k),
+      orderNo: 'DC' + String(now).slice(-6) + String(2001 + k),
+      riderId: String(riderRow.id),
+      riderName: riderRow.name,
+      riderPhone: riderRow.phone,
+      shopId,
+      shopName,
+      userName,
+      phone,
+      tableNo: '外卖配送',
+      address: addrDetail,
+      addressInfo: { name: userName, phone, detail: addrDetail, tag: k % 2 === 0 ? '公司' : '家' },
+      items,
+      amount,
+      packFee: 0,
+      deliveryFee,
+      totalAmount: Number((amount + deliveryFee).toFixed(2)),
+      remark: '',
+      payStatus: 'PAID',
+      status: 'DONE',
+      createdAt: at(0),
+      timeline: [
+        { status: 'PENDING', time: at(0) },
+        { status: 'ACCEPTED', time: at(20) },
+        { status: 'DELIVERING', time: at(45) },
+        { status: 'DONE', time: at(70) }
+      ]
+    })
+  })
 
   /* ---------------- 店铺（平台视角；当前只有第一家接入了完整菜单）---------------- */
   const rawShops = [
@@ -319,12 +367,34 @@ function seed() {
     { id: '9002', userId: '9002', tag: '家', name: '胡粤毫', phone: '13800001111', detail: '北京市海淀区五道口华清嘉园 12 楼 3 单元 502', isDefault: 0 }
   ]
 
+  const rawCombos2 = [
+    ['外婆家单人餐', 2105, 78.0, ['3101', '3110'], 1],
+    ['外婆家双人餐', 2106, 168.0, ['3101', '3102', '3105', '3111'], 1]
+  ]
+  const combos2 = rawCombos2.map(([name, categoryId, price, dishIds, status], i) => ({
+    id: String(4101 + i),
+    shopId: '8002',
+    name,
+    categoryId: String(categoryId),
+    price,
+    dishIds,
+    image: thumb(name.slice(0, 1), palette[(i + 5) % palette.length]),
+    description: `${name}，含 ${dishIds.length} 道菜`,
+    status,
+    updateTime: ago(i * 7 + 4)
+  }))
+  // 分类上的「关联数量」按真实数据算一遍，商家后台显示才对
+  categories2.forEach((c) => {
+    const pool = Number(c.type) === 2 ? combos2 : dishes2
+    c.dishCount = pool.filter((x) => String(x.categoryId) === String(c.id)).length
+  })
+
   return {
     riders,
     categories: [...categories, ...categories2],
     flavors,
     dishes: [...dishes, ...dishes2],
-    combos,
+    combos: [...combos, ...combos2],
     orders,
     shops,
     addresses,
@@ -360,6 +430,20 @@ function save(db) {
   }
 }
 
+/**
+ * 当前登录的商家管哪家店（模拟后端的「数据权限」）。
+ * 取不到（比如顾客/骑手/未登录）就退回第一家店，保证公开页面和有历史数据的场景不炸。
+ */
+function currentShop() {
+  try {
+    const token = localStorage.getItem('dcy_token') || ''
+    const username = token.replace('mock-token-', '')
+    return ACCOUNT_SHOP[username] || ACCOUNT_SHOP.merchant
+  } catch {
+    return ACCOUNT_SHOP.merchant
+  }
+}
+
 function paginate(rows, { page = 1, pageSize = 10 } = {}) {
   const p = Number(page) || 1
   const s = Number(pageSize) || 10
@@ -387,13 +471,16 @@ const routes = [
       }
       const role = ACCOUNT_ROLE[username] || 'CUSTOMER'
       const rider = (db.riders || []).find((r) => r.username === username)
+      const shop = ACCOUNT_SHOP[username] || null
       return ok({
         token: 'mock-token-' + username,
         user: {
           id: rider ? String(rider.id) : role === 'MERCHANT' ? '9001' : '9002',
           username,
           name: rider ? rider.name : account.name,
-          role
+          role,
+          shopId: shop ? shop.id : '',
+          shopName: shop ? shop.name : ''
         }
       })
     }
@@ -410,11 +497,14 @@ const routes = [
       const db = load()
       const role = ACCOUNT_ROLE[username] || 'CUSTOMER'
       const rider = (db.riders || []).find((r) => r.username === username)
+      const shop = ACCOUNT_SHOP[username] || null
       return ok({
         id: rider ? String(rider.id) : role === 'MERCHANT' ? '9001' : '9002',
         username,
         name: rider ? rider.name : account.name,
-        role
+        role,
+        shopId: shop ? shop.id : '',
+        shopName: shop ? shop.name : ''
       })
     }
   },
@@ -544,8 +634,8 @@ const routes = [
     url: /^\/admin\/category\/page$/, 
     handler: ({ params }) => {
       const db = load()
-      // 商家后台只管自己那家店（演示账号 = 中关村店 8001）
-      const shopId = String((params || {}).shopId || '8001')
+      // 商家后台只看自己那家店：店铺由登录账号决定（模拟后端数据权限）
+      const shopId = String(currentShop().id)
       let rows = db.categories.filter((r) => String(r.shopId || '8001') === shopId)
       const { type, name, status } = params || {}
       if (notEmpty(type)) rows = rows.filter((r) => Number(r.type) === Number(type))
@@ -561,11 +651,14 @@ const routes = [
     handler: ({ data }) => {
       const db = load()
       const type = Number(data.type) === 2 ? 2 : 1
-      if (db.categories.some((r) => r.type === type && r.name === data.name)) {
+      const shopId = String(currentShop().id)
+      const sameShop = (r) => String(r.shopId || '8001') === shopId
+      if (db.categories.some((r) => sameShop(r) && r.type === type && r.name === data.name)) {
         return fail(4001, '同类下已存在同名分类')
       }
       const row = {
         id: String(db.seqCat++),
+        shopId,
         name: (data.name || '').trim(),
         type,
         sort: Number(data.sort) || 1,
@@ -652,8 +745,8 @@ const routes = [
     handler: ({ params }) => {
       const db = load()
       const catName = (id) => (db.categories.find((c) => String(c.id) === String(id)) || {}).name || ''
-      // 商家后台只管自己那家店（演示账号 = 中关村店 8001）
-      const shopId = String((params || {}).shopId || '8001')
+      // 商家后台只看自己那家店：店铺由登录账号决定（模拟后端数据权限）
+      const shopId = String(currentShop().id)
       let rows = (db.dishes || [])
         .filter((d) => String(d.shopId || '8001') === shopId)
         .map((d) => ({ ...d, categoryName: catName(d.categoryId) }))
@@ -672,9 +765,13 @@ const routes = [
       const db = load()
       const type = Number((db.categories.find((c) => String(c.id) === String(data.categoryId)) || {}).type)
       if (type !== 1) return fail(1001, '请选择菜品分类（套餐分类不能放菜品）')
-      if (db.dishes.some((d) => d.name === data.name)) return fail(4001, '已存在同名菜品')
+      const shopId = String(currentShop().id)
+      if (db.dishes.some((d) => String(d.shopId || '8001') === shopId && d.name === data.name)) {
+        return fail(4001, '已存在同名菜品')
+      }
       const row = {
         id: String(db.seqDish++),
+        shopId,
         name: (data.name || '').trim(),
         categoryId: String(data.categoryId),
         price: Number(data.price) || 0,
@@ -743,8 +840,8 @@ const routes = [
       const db = load()
       const catName = (id) => (db.categories.find((c) => String(c.id) === String(id)) || {}).name || ''
       const dishById = (id) => (db.dishes || []).find((d) => String(d.id) === String(id))
-      // 商家后台只管自己那家店（演示账号 = 中关村店 8001）
-      const shopId = String((params || {}).shopId || '8001')
+      // 商家后台只看自己那家店：店铺由登录账号决定（模拟后端数据权限）
+      const shopId = String(currentShop().id)
       let rows = (db.combos || [])
         .filter((c) => String(c.shopId || '8001') === shopId)
         .map((c) => {
@@ -787,9 +884,13 @@ const routes = [
       const cat = db.categories.find((c) => String(c.id) === String(data.categoryId))
       if (!cat || Number(cat.type) !== 2) return fail(1001, '请选择套餐分类（菜品分类不能放套餐）')
       if (!data.dishIds || !data.dishIds.length) return fail(1001, '套餐至少要选 1 个菜品')
-      if (db.combos.some((c) => c.name === data.name)) return fail(4001, '已存在同名套餐')
+      const shopId = String(currentShop().id)
+      if (db.combos.some((c) => String(c.shopId || '8001') === shopId && c.name === data.name)) {
+        return fail(4001, '已存在同名套餐')
+      }
       const row = {
         id: String(db.seqCombo++),
+        shopId,
         name: (data.name || '').trim(),
         categoryId: String(data.categoryId),
         price: Number(data.price) || 0,
@@ -1209,7 +1310,8 @@ const routes = [
     url: /^\/admin\/order\/status-count$/,
     handler: () => {
       const db = load()
-      const rows = db.orders || []
+      const shopId = String(currentShop().id)
+      const rows = (db.orders || []).filter((o) => String(o.shopId || '8001') === shopId)
       const out = { ALL: rows.length, PENDING: 0, ACCEPTED: 0, DELIVERING: 0, DONE: 0, CANCELED: 0 }
       rows.forEach((r) => {
         out[r.status] = (out[r.status] || 0) + 1
@@ -1222,7 +1324,8 @@ const routes = [
     url: /^\/admin\/order\/page$/,
     handler: ({ params }) => {
       const db = load()
-      let rows = (db.orders || []).slice()
+      const shopId = String(currentShop().id)
+      let rows = (db.orders || []).filter((o) => String(o.shopId || '8001') === shopId)
       const { orderNo, phone, status, startTime, endTime } = params || {}
       if (orderNo) rows = rows.filter((r) => (r.orderNo || '').includes(orderNo))
       if (phone) rows = rows.filter((r) => (r.phone || '').includes(phone))
@@ -1293,7 +1396,8 @@ const routes = [
     url: /^\/admin\/statistics\/overview$/,
     handler: () => {
       const db = load()
-      const orders = db.orders || []
+      const shopId = String(currentShop().id)
+      const orders = (db.orders || []).filter((o) => String(o.shopId || '8001') === shopId)
       const nowMs = Date.now()
 
       // 近 30 天趋势：营业额只算已完成，订单量算未取消

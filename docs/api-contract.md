@@ -297,10 +297,11 @@ interface Employee {
 | `order.shop_id` | 下单落库时写入，顾客端与骑手端都靠它显示「店铺」 |
 | `/user/shops` | 列表带 `openMenu`（菜单是否已接入）；未接入的店前端显示「菜单接入中」 |
 | `/user/menu?shopId=` | 按店铺返回分类 + 在售菜品 |
-| `/admin/dish/page`、`/admin/category/page`、`/admin/combo/page`、`/admin/order/page` | 建议都支持 `shopId` 入参；演示版默认只返回 `8001`（商家后台就是一家店） |
+| `/auth/login`、`/auth/me` | 返回 `shopId` / `shopName`，标明这个账号管哪家店（骑手、顾客为空） |
+| `/admin/dish/page`、`/admin/category/page`、`/admin/combo/page`、`/admin/order/page`、`/admin/order/status-count`、`/admin/statistics/overview` | **店铺范围由后端从登录态里取，不用前端传 shopId**：商家只返回自己店的数据；新增分类/菜品/套餐时也由后端自动写入所属店铺 |
 
-> 商家后台目前是「一家店」的视角，没有店铺切换器；要变成一家商家管多家店，
-> 需要先加「当前店铺」选择，所有后台请求带上 `shopId`，这块等后端字段定了再做。
+> 演示版就是这么做的：mock 里 `currentShop()` 从 token 反查账号所属店铺（见 `constants/demoAccounts.js` 的 `ACCOUNT_SHOP`），
+> 再拿它过滤列表。后端接进来时按同样思路处理即可——**不要把店铺范围做成前端参数，否则改一个请求就能看到别人的数据**。
 
 ---
 

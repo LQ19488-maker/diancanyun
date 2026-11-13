@@ -20,7 +20,10 @@ export function toProfile(d = {}) {
     id: String(d.id ?? d.employeeId ?? ''),
     username: d.username ?? '',
     name: d.name ?? d.realName ?? '',
-    role: ROLE_SET.includes(d.role) ? d.role : ROLE_FROM_TEXT[d.roleName] || 'CUSTOMER'
+    role: ROLE_SET.includes(d.role) ? d.role : ROLE_FROM_TEXT[d.roleName] || 'CUSTOMER',
+    /* 商家账号绑定哪家店：后台所有列表都由后端按这个范围过滤 */
+    shopId: d.shopId ? String(d.shopId) : '',
+    shopName: d.shopName ?? ''
   }
 }
 
