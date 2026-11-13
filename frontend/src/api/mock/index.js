@@ -14,7 +14,7 @@ const ok = (data) => ({ code: 200, message: 'ok', data })
 const fail = (code, message) => ({ code, message, data: null })
 
 /** 数据结构变化时改版本号，旧的 localStorage 数据自动作废 */
-const STORE_KEY = 'dcy_mock_db_v3'
+const STORE_KEY = 'dcy_mock_db_v4'
 
 function seed() {
   const now = Date.now()
@@ -23,8 +23,8 @@ function seed() {
   /* ---------------- 员工 ---------------- */
   const names = [
     ['admin', '刘添祺', 'ADMIN', 1],
-    ['hyh', 'HYH', 'ADMIN', 1],
-    ['gy', 'GY', 'ADMIN', 1],
+    ['hyh', '胡粤毫', 'ADMIN', 1],
+    ['gy', '桂誉', 'ADMIN', 1],
     ['zhangsan', '张三', 'STAFF', 1],
     ['lisi', '李四', 'STAFF', 1],
     ['wangwu', '王五', 'STAFF', 1],

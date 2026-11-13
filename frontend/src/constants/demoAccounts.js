@@ -6,8 +6,8 @@
  */
 export const DEMO_ACCOUNTS = [
   { role: '管理员', username: 'admin', password: 'admin1234', name: '刘添祺' },
-  { role: '管理员', username: 'hyh', password: 'hyh1234', name: 'HYH' },
-  { role: '管理员', username: 'gy', password: 'gy1234', name: 'GY' },
+  { role: '管理员', username: 'hyh', password: 'hyh1234', name: '胡粤毫' },
+  { role: '管理员', username: 'gy', password: 'gy1234', name: '桂誉' },
   { role: '员工', username: 'staff', password: 'staff1234', name: '员工账号' }
 ]
 
