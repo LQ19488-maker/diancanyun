@@ -162,6 +162,7 @@ class BusinessFlowIntegrationTest {
                 "createdAt 必须匹配 yyyy-MM-dd HH:mm:ss，实际为 " + order.path("createdAt").asText());
         assertTrue(order.path("timeline").get(0).path("time").asText().matches(pattern));
         assertTrue(order.path("id").isTextual(), "订单号主键必须序列化成字符串");
+        assertEquals("PAID", order.path("payStatus").asText(), "下单后应直接进入已支付状态");
     }
 
     @Test

@@ -1,5 +1,40 @@
 <template>
   <div class="workbench">
+    <!-- 天气与补贴 -->
+    <div v-if="weather" class="weather" :class="{ bad: weather.subsidy.active }">
+      <div class="w-main">
+        <span class="w-icon">{{ weather.icon }}</span>
+        <div class="w-text">
+          <div class="w-line">
+            <span class="w-temp">{{ weather.temperature }}°</span>
+            <span class="w-cond">{{ weather.condition }}</span>
+            <span class="w-city">{{ weather.city }}</span>
+          </div>
+          <div class="w-sub">
+            体感 {{ weather.feelsLike }}° · {{ weather.wind }} · 湿度 {{ weather.humidity }}%
+          </div>
+          <div class="w-sub">
+            明天 {{ weather.tomorrow.icon }} {{ weather.tomorrow.condition }}
+            {{ weather.tomorrow.tempLow }}~{{ weather.tomorrow.tempHigh }}°
+          </div>
+        </div>
+      </div>
+      <div class="w-subsidy">
+        <template v-if="weather.subsidy.active">
+          <span class="s-tag">天气补贴</span>
+          <span class="s-amount">+¥{{ weather.subsidy.amount }}/单</span>
+          <span class="s-reason">{{ weather.subsidy.reason }}</span>
+        </template>
+        <template v-else>
+          <span class="s-tag off">无补贴</span>
+          <span class="s-reason">{{ weather.subsidy.reason }}</span>
+        </template>
+      </div>
+      <div v-if="weather.subsidy.active" class="w-note">
+        今日已完成 {{ stats.todayDone || 0 }} 单，补贴 ¥{{ Number(stats.todaySubsidy || 0).toFixed(2) }} 已计入收入
+      </div>
+    </div>
+
     <!-- 今日概览 -->
     <div class="cards">
       <div class="card">
@@ -76,6 +111,7 @@ const list = ref([])
 const grabbingId = ref('')
 /** 直接跟着 store 走：store 加载完卡片自动刷新，不用手动赋值 */
 const stats = computed(() => riderStore.stats || {})
+const weather = computed(() => riderStore.weather || null)
 /** 休息中的骑手不能抢单：按钮置灰，点了也不会发请求 */
 const online = computed(() => Number(riderStore.profile?.online ?? 1) === 1)
 
@@ -121,6 +157,100 @@ onMounted(load)
   grid-template-columns: repeat(4, 1fr);
   gap: 8px;
   padding: 12px;
+}
+
+.weather {
+  margin: 12px 12px 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: linear-gradient(120deg, #eef4fc, #f7fafd);
+  border: 1px solid #e2ebf7;
+}
+
+.weather.bad {
+  background: linear-gradient(120deg, #fdf4e7, #fff9f1);
+  border-color: #f5dcc0;
+}
+
+.w-main {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.w-icon {
+  font-size: 26px;
+  line-height: 1.1;
+}
+
+.w-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.w-line {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.w-temp {
+  font-size: 18px;
+  font-weight: 700;
+  color: #1f2d3d;
+}
+
+.w-cond {
+  font-size: 13px;
+  color: #1f2d3d;
+}
+
+.w-city {
+  font-size: 11px;
+  color: #9aa3b2;
+}
+
+.w-sub {
+  margin-top: 2px;
+  font-size: 11px;
+  color: #8c93a1;
+}
+
+.w-subsidy {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.s-tag {
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: #e8833a;
+  color: #fff;
+  font-size: 10px;
+}
+
+.s-tag.off {
+  background: #c4cad6;
+}
+
+.s-amount {
+  font-size: 13px;
+  font-weight: 700;
+  color: #c0392b;
+}
+
+.s-reason {
+  font-size: 11px;
+  color: #8c93a1;
+}
+
+.w-note {
+  margin-top: 6px;
+  font-size: 10px;
+  color: #b45309;
 }
 
 .card {

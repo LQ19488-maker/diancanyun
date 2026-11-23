@@ -18,6 +18,11 @@
           <span class="mi-text">收货地址</span>
           <span class="mi-arrow">›</span>
         </div>
+        <div class="menu-item" @click="router.push('/h5/coupons')">
+          <span class="mi-ico">🎟</span>
+          <span class="mi-text">优惠券</span>
+          <span class="mi-arrow">›</span>
+        </div>
         <div class="menu-item" @click="router.push('/h5/shop')">
           <span class="mi-ico">🏪</span>
           <span class="mi-text">去点外卖</span>

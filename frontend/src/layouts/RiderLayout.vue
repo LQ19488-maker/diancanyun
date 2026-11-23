@@ -49,7 +49,8 @@ const riderStore = useRiderStore()
 
 const TABS = [
   { path: '/rider/workbench', label: '接单大厅', icon: '📋' },
-  { path: '/rider/mine', label: '我的配送', icon: '🛵' }
+  { path: '/rider/mine', label: '我的配送', icon: '🛵' },
+  { path: '/rider/wallet', label: '我的', icon: '💰' }
 ]
 
 const rider = computed(() => riderStore.profile || {})

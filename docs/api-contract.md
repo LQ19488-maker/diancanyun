@@ -50,11 +50,22 @@ USER_PREFIX  = '/user'    // 顾客端
 | POST | `/rider/tasks/{orderId}/grab` | 抢单：分配骑手并把订单置为 `DELIVERING`；已被抢返回业务错误 |
 | GET | `/rider/orders` | 我的配送单（`riderId=当前骑手`），可按 `status` 过滤 |
 | POST | `/rider/orders/{orderId}/finish` | 确认送达 → `DONE`，并累加骑手今日完成数 |
-| GET | `/rider/stats` | `{online,todayDone,onTheWay,rating,totalDone,income,availableTasks}` |
+| GET | `/rider/stats` | `{online,todayDone,onTheWay,rating,totalDone,income,baseIncome,todaySubsidy,subsidyPer,balance,availableTasks}` |
 | PUT | `/rider/online` | 骑手自己上线/休息，入参 `online=0\|1` |
+| GET | `/rider/weather` | 天气与补贴：`{city,condition,icon,temperature,feelsLike,wind,humidity,tomorrow,subsidy{active,amount,reason},updateTime}` |
+| GET | `/rider/wallet` | 钱包：`{balance,totalIncome,baseIncome,todayIncome,todaySubsidy,subsidyPer,withdrawn,basePrice,records[]}` |
+| POST | `/rider/withdraw` | 提现 `{amount,channel}`；校验：`1 ≤ amount ≤ balance`，成功后余额扣减并生成一条记录 |
 | GET/POST/PUT/DELETE | `/admin/rider/**` | 商家侧的骑手管理（列表、新增、编辑、删除、`/{id}/status`、`/{id}/online`） |
 
 > 订单 DTO 新增两个字段：`riderId`（未接单为空串）、`riderName`。
+>
+> **收入口径必须只有一个公式**（前端演示版写在 `mock/index.js` 的 `riderIncome()` 里）：
+> `收入 = 完成单数 × 基础配送费(5 元) + 当日完成单数 × 天气补贴`，
+> `可提现余额 = 累计收入 − 已提现`。工作台卡片、钱包页、提现校验都读同一个公式，
+> 不要在两处各算一遍——否则骑手会发现「卡片显示 12 元，提现说只有 10 元」。
+>
+> 天气补贴建议由后端按「天气 + 时段」配置（演示版按时段给：雨天 +2、夜间 +2、早高峰 +1.5），
+> 前端只负责展示，不要在页面里写死金额。
 
 ## 〇、后端对接现状（2026-11）
 
@@ -307,6 +318,40 @@ interface Rider {
 
 > 未达起送价由后端再校验一次（返回 4001 + 提示文案），前端按钮也已提前置灰。
 
+### 3.5.1 优惠券与团购套餐
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | `/user/coupon/templates` | 领券中心：`{title,threshold,amount,shopId,desc,left,claimed}`；用掉/过期的券可以再领，`claimed` 只表示「手上还有未用的一张」 |
+| POST | `/user/coupon/{id}/claim` | 领取，重复领取返回 4001 |
+| GET | `/user/coupons?status=&orderAmount=&shopId=` | 我的券；传 `orderAmount` + `shopId` 时额外返回 `usable`（金额够、店铺适用、状态未用），下单页据此过滤 |
+| GET | `/user/menu?shopId=` | 返回值里多一个 `combos`：该店在售套餐 `{id,name,price,originPrice,dishCount,dishNames}` |
+
+**下单请求体新增两个字段**：
+
+```json
+{
+  "shopId": "8001",
+  "addressId": "9001",
+  "couponId": "7101",
+  "remark": "",
+  "items": [
+    { "dishId": "3001", "quantity": 1, "flavors": [{ "name": "辣度", "value": "微辣" }] },
+    { "comboId": "4001", "quantity": 1 }
+  ]
+}
+```
+
+后端要做的校验（缺一条就会出现「券用不了」这类客诉）：
+
+1. `couponId` 必须属于当前用户、状态 `UNUSED`、未过期；
+2. 券绑了店铺（`shopId` 非空）时，只能用在对应店铺；
+3. 菜品金额达到券门槛（门槛按**菜品金额**算，不含配送费）；
+4. 抵扣金额不超过菜品金额，**配送费不参与抵扣**；
+5. 下单成功后把券置为 `USED` 并记录使用时间（并发下要保证一张券只能用一次）。
+
+订单里建议回填 `couponId`、`couponTitle`、`couponAmount`，顾客端订单详情会显示「优惠券 -¥x」。
+
 ### 3.6 多店铺：`shopId` 要挂在哪
 
 现在前端已经按「菜品属于某一家店」来写，演示数据里有两家店各有自己的菜单
@@ -319,10 +364,11 @@ interface Rider {
 | `order.shop_id` | 下单落库时写入，顾客端与骑手端都靠它显示「店铺」 |
 | `/user/shops` | 列表带 `openMenu`（菜单是否已接入）；未接入的店前端显示「菜单接入中」 |
 | `/user/menu?shopId=` | 按店铺返回分类 + 在售菜品 |
-| `/admin/dish/page`、`/admin/category/page`、`/admin/combo/page`、`/admin/order/page` | 建议都支持 `shopId` 入参；演示版默认只返回 `8001`（商家后台就是一家店） |
+| `/auth/login`、`/auth/me` | 返回 `shopId` / `shopName`，标明这个账号管哪家店（骑手、顾客为空） |
+| `/admin/dish/page`、`/admin/category/page`、`/admin/combo/page`、`/admin/order/page`、`/admin/order/status-count`、`/admin/statistics/overview` | **店铺范围由后端从登录态里取，不用前端传 shopId**：商家只返回自己店的数据；新增分类/菜品/套餐时也由后端自动写入所属店铺 |
 
-> 商家后台目前是「一家店」的视角，没有店铺切换器；要变成一家商家管多家店，
-> 需要先加「当前店铺」选择，所有后台请求带上 `shopId`，这块等后端字段定了再做。
+> 演示版就是这么做的：mock 里 `currentShop()` 从 token 反查账号所属店铺（见 `constants/demoAccounts.js` 的 `ACCOUNT_SHOP`），
+> 再拿它过滤列表。后端接进来时按同样思路处理即可——**不要把店铺范围做成前端参数，否则改一个请求就能看到别人的数据**。
 
 ### 3.7 商家端店铺设置（后端已实现，前端待接入）
 

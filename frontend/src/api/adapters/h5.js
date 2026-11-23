@@ -19,13 +19,31 @@ export function toDish(d = {}) {
   }
 }
 
+/** 团购套餐（多人餐）：比单点便宜，按套餐价卖 */
+export function toCombo(c = {}) {
+  return {
+    id: String(c.id ?? ''),
+    name: c.name ?? '',
+    image: c.image ?? '',
+    imageUrl: c.image ? resolveFileUrl(c.image) : '',
+    price: Number(c.price ?? 0),
+    originPrice: Number(c.originPrice ?? 0),
+    dishCount: Number(c.dishCount ?? 0),
+    dishNames: c.dishNames || [],
+    description: c.description ?? '',
+    /** 相对原价省了多少（前端直接展示，不再自己算） */
+    save: Number(Math.max(0, Number(c.originPrice ?? 0) - Number(c.price ?? 0)).toFixed(2))
+  }
+}
+
 export default {
-  /** 顾客端菜单（只返回在售菜品与启用分类） */
+  /** 顾客端菜单（只返回在售菜品与启用分类，外加该店的团购套餐） */
   async menu(params = {}) {
     const d = await request({ url: userUrl('/menu'), method: 'get', params })
     return {
       categories: (d?.categories || []).map((c) => ({ id: String(c.id), name: c.name })),
-      dishes: (d?.dishes || []).map(toDish)
+      dishes: (d?.dishes || []).map(toDish),
+      combos: (d?.combos || []).map(toCombo)
     }
   },
 
@@ -46,5 +64,6 @@ export default {
     return { list: records.map(orderToModel), total: Number(d?.total ?? records.length) }
   },
 
-  toDish
+  toDish,
+  toCombo
 }

@@ -44,6 +44,10 @@
         </div>
 
         <div class="header-right">
+          <!-- 当前账号管的哪家店：多商家时一眼能看出数据范围 -->
+          <el-tag v-if="user.profile?.shopName" size="small" effect="plain" class="shop-tag">
+            🏪 {{ user.profile.shopName }}
+          </el-tag>
           <el-tooltip content="刷新当前页" placement="bottom">
             <el-icon class="act" @click="reload"><Refresh /></el-icon>
           </el-tooltip>
@@ -56,6 +60,9 @@
             <template #dropdown>
               <el-dropdown-menu>
                 <el-dropdown-item disabled>角色：{{ ROLE_LABEL[user.role] || user.role }}</el-dropdown-item>
+                <el-dropdown-item v-if="user.profile?.shopName" disabled>
+                  店铺：{{ user.profile.shopName }}
+                </el-dropdown-item>
                 <el-dropdown-item command="logout" divided>退出登录</el-dropdown-item>
               </el-dropdown-menu>
             </template>
@@ -191,6 +198,13 @@ async function onCommand(cmd) {
   display: flex;
   align-items: center;
   gap: 12px;
+}
+
+.shop-tag {
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .collapse-btn,
